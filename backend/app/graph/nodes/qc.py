@@ -28,7 +28,8 @@ def qc_node(state: dict) -> dict:
         llm_verdict = None
         if det_ok:  # 确定性检查过了才花 LLM 做忠实性深检
             try:
-                raw = llm.chat(qc_agent.build_messages(question, answer, chunks), temperature=0.0)
+                raw = llm.chat(qc_agent.build_messages(question, answer, chunks),
+                               temperature=0.0, agent="qc")
                 llm_verdict = qc_agent.parse_verdict(raw)
             except Exception:  # noqa: BLE001 —— 质检挂了放行原文（降级不阻塞）
                 llm_verdict = None

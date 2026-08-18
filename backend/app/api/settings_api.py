@@ -1,0 +1,123 @@
+"""模型设置 API（P7-lite）：供应商 CRUD + 连接测试 + Agent 绑定。"""
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.api.auth import get_current_operator
+from app.core.db import get_db
+from app.models import AgentModelBinding, ModelProvider, Operator
+
+router = APIRouter(prefix="/api/console/settings", tags=["settings"],
+                   dependencies=[Depends(get_current_operator)])
+
+
+def _mask(key: str | None) -> str | None:
+    if not key:
+        return None
+    return key[:6] + "****" + key[-4:]
+
+
+class ProviderRequest(BaseModel):
+    name: str
+    base_url: str
+    api_key: str | None = None
+
+
+class BindingRequest(BaseModel):
+    agent_name: str
+    provider_id: int
+    model_name: str
+    temperature: float | None = None
+
+
+@router.get("/providers")
+def list_providers(db: Session = Depends(get_db)):
+    rows = db.scalars(select(ModelProvider)).all()
+    return {"items": [{"id": p.id, "name": p.name, "base_url": p.base_url,
+                       "api_key_masked": _mask(p.api_key), "enabled": p.enabled,
+                       "last_test_status": p.last_test_status}
+                      for p in rows], "total": len(rows)}
+
+
+@router.post("/providers", status_code=201)
+def create_provider(body: ProviderRequest, db: Session = Depends(get_db)):
+    if db.scalar(select(ModelProvider).where(ModelProvider.name == body.name)):
+        raise HTTPException(409, "供应商已存在")
+    p = ModelProvider(name=body.name, base_url=body.base_url, api_key=body.api_key)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return {"id": p.id, "name": p.name}
+
+
+@router.put("/providers/{provider_id}")
+def update_provider(provider_id: int, body: ProviderRequest, db: Session = Depends(get_db)):
+    p = db.get(ModelProvider, provider_id)
+    if p is None:
+        raise HTTPException(404, "provider not found")
+    p.base_url = body.base_url
+    if body.api_key:  # 不传 key = 保留原值（掩码回显场景）
+        p.api_key = body.api_key
+    db.commit()
+    return {"id": p.id, "name": p.name}
+
+
+@router.delete("/providers/{provider_id}")
+def delete_provider(provider_id: int, db: Session = Depends(get_db)):
+    p = db.get(ModelProvider, provider_id)
+    if p is None:
+        raise HTTPException(404, "provider not found")
+    if db.scalar(select(AgentModelBinding).where(AgentModelBinding.provider_id == provider_id)):
+        raise HTTPException(409, "仍有 Agent 绑定该供应商")
+    db.delete(p)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/providers/{provider_id}/test")
+def test_provider(provider_id: int, db: Session = Depends(get_db)):
+    """连接测试：一次 1-token 级调用。"""
+    from openai import OpenAI
+
+    p = db.get(ModelProvider, provider_id)
+    if p is None:
+        raise HTTPException(404, "provider not found")
+    try:
+        client = OpenAI(api_key=p.api_key or "not-needed", base_url=p.base_url, timeout=15)
+        resp = client.chat.completions.create(
+            model="deepseek-chat",  # W4 简化：测试用当前默认模型名
+            messages=[{"role": "user", "content": "hi"}], max_tokens=1)
+        p.last_test_status = "ok"
+        db.commit()
+        return {"ok": True, "sample": (resp.choices[0].message.content or "")[:20]}
+    except Exception as exc:  # noqa: BLE001
+        p.last_test_status = "failed"
+        db.commit()
+        return {"ok": False, "error": str(exc)[:150]}
+
+
+@router.get("/bindings")
+def list_bindings(db: Session = Depends(get_db)):
+    rows = db.execute(select(AgentModelBinding, ModelProvider)
+                      .join(ModelProvider, AgentModelBinding.provider_id == ModelProvider.id)).all()
+    return {"items": [{"agent_name": b.agent_name, "provider": p.name,
+                       "model_name": b.model_name,
+                       "temperature": float(b.temperature) if b.temperature is not None else None}
+                      for b, p in rows]}
+
+
+@router.put("/bindings/{agent_name}")
+def upsert_binding(agent_name: str, body: BindingRequest, db: Session = Depends(get_db)):
+    if db.get(ModelProvider, body.provider_id) is None:
+        raise HTTPException(404, "provider not found")
+    row = db.scalar(select(AgentModelBinding)
+                    .where(AgentModelBinding.agent_name == agent_name))
+    if row is None:
+        row = AgentModelBinding(agent_name=agent_name)
+        db.add(row)
+    row.provider_id = body.provider_id
+    row.model_name = body.model_name
+    row.temperature = body.temperature if body.temperature is not None else 0
+    db.commit()
+    return {"agent_name": agent_name, "provider_id": body.provider_id, "model_name": body.model_name}

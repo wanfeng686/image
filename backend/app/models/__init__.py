@@ -8,10 +8,18 @@ from app.models.agent_run import AgentRun
 from app.models.approval import ApprovalRequest, ApprovalAction, ExecutedAction
 from app.models.rule import RiskRule, EscalationRule
 from app.models.mock_ecommerce import MockProduct, MockOrder, MockShipment
+from app.models.knowledge_base import KbDocument, KbDocumentVersion, KbGapRecord, KbDraft
+from app.models.insight import InsightReport, InsightFinding
+from app.models.eval import EvalCase, EvalRun
+from app.models.model_config import ModelProvider, AgentModelBinding
 
 __all__ = [
     "User", "Operator", "ChatSession", "Message", "Ticket", "SessionNote",
     "AgentRun", "ApprovalRequest", "ApprovalAction", "ExecutedAction",
     "RiskRule", "EscalationRule",
     "MockProduct", "MockOrder", "MockShipment",
+    "KbDocument", "KbDocumentVersion", "KbGapRecord", "KbDraft",
+    "InsightReport", "InsightFinding",
+    "EvalCase", "EvalRun",
+    "ModelProvider", "AgentModelBinding",
 ]

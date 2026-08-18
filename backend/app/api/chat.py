@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent import knowledge as knowledge_agent
+from app.agent import qc as qc_agent
 from app.core.db import get_db
 from app.graph.nodes.order import order_node
 from app.graph.nodes.resolution import resolution_node
@@ -254,11 +255,12 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
             yield sse_event("agent_status", {"agent": "knowledge", "status": "working"})
             answer = None
             with Timer() as t:
-                chunks = kb.retrieve(body.content)
+                chunks = kb.retrieve(db, body.content)
                 if chunks:
                     pieces = []
                     try:
-                        for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks)):
+                        for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks),
+                                                      agent="knowledge"):
                             pieces.append(token)
                             yield sse_event("message_delta", {"message_id": str(agent_id), "delta": token})
                         answer = "".join(pieces)
@@ -268,14 +270,28 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
                                 output=None, status="failed", error=str(exc),
                                 message_id=customer_msg.id, used_llm=True)
             if answer and not knowledge_agent.is_refusal(answer):
-                agent_source = "knowledge"
-                log_run(db, session.id, "knowledge", "knowledge",
-                        input_summary={"question": body.content[:200], "chunks": [c["id"] for c in chunks]},
-                        output={"answer": answer[:300]}, latency_ms=t.ms,
-                        message_id=customer_msg.id, used_llm=True)
-                log_run(db, session.id, "supervisor", "respond",
-                        input_summary=None, output={"delivered": True},
-                        message_id=customer_msg.id)
+                # 流式路径的质检闸：确定性预检（引用存在+数字覆盖）。
+                # 不过 → 撤回已流出的答案改拒答（打给用户的内容以 message_completed 定格为准）。
+                det_ok, det_problems = qc_agent.deterministic_check(answer, chunks)
+                log_run(db, session.id, "qc", "qc",
+                        input_summary={"answer": answer[:200]},
+                        output={"pass": det_ok, "problems": det_problems, "stream_path": True},
+                        message_id=customer_msg.id,
+                        status="success" if det_ok else "rejected")
+                if det_ok:
+                    agent_source = "knowledge"
+                    log_run(db, session.id, "knowledge", "knowledge",
+                            input_summary={"question": body.content[:200], "chunks": [c["id"] for c in chunks]},
+                            output={"answer": answer[:300]}, latency_ms=t.ms,
+                            message_id=customer_msg.id, used_llm=True)
+                    log_run(db, session.id, "supervisor", "respond",
+                            input_summary=None, output={"delivered": True},
+                            message_id=customer_msg.id)
+                else:
+                    answer = REFUSAL_TEXT
+                    log_run(db, session.id, "supervisor", "respond",
+                            input_summary=None, output={"refused": True, "qc_rejected": True},
+                            message_id=customer_msg.id)
             else:
                 answer = REFUSAL_TEXT
                 log_run(db, session.id, "supervisor", "respond",

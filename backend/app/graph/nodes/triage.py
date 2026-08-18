@@ -18,7 +18,7 @@ def triage_node(state: dict) -> dict:
         try:
             raw = llm.chat(
                 triage_agent.build_messages(question, getattr(session, "rolling_summary", "") or "", slots),
-                temperature=0.0,
+                temperature=0.0, agent="triage",
             )
             result = triage_agent.parse_llm_output(raw)
         except Exception as exc:  # noqa: BLE001 —— 分诊永不阻塞对话
