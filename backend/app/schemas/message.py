@@ -11,7 +11,8 @@ class MessageOut(BaseModel):
     session_id: uuid.UUID
     role: str                   # customer | agent | human_operator | system
     content: str | None = None
-    content_type: str
+    content_type: str           # text | card | system
+    card_data: dict | None = None
     agent_source: str | None = None
     status: str
     created_at: datetime

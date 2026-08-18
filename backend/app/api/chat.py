@@ -5,25 +5,64 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent import knowledge as knowledge_agent
 from app.core.db import get_db
+from app.graph.nodes.order import order_node
+from app.graph.nodes.resolution import resolution_node
+from app.graph.nodes.triage import triage_node
 from app.graph.supervisor import supervisor
 from app.models import ChatSession, Message, User
 from app.schemas.message import MessageOut, MessagePage
 from app.schemas.session import SessionOut
 from app.services import kb, llm
+from app.services.runs import Timer, log_run
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
+REFUSAL_TEXT = "抱歉，这个问题我需要转人工处理。"
+
 
 class CreateSessionRequest(BaseModel):
-    user_id: uuid.UUID | None = None  # 不传就自动建一个新顾客
+    user_id: uuid.UUID | None = None        # 指定已有用户
+    user_external_id: str | None = None     # 按渠道 ID 绑定（无则自动建），演示页用
 
 
 class SendMessageRequest(BaseModel):
     content: str
+
+
+class RateRequest(BaseModel):
+    rating: int  # 1=👍  -1=👎
+
+
+def sse_event(event: str, data: dict) -> str:
+    """把一条数据编码成 SSE 协议的一帧。"""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _build_history(db: Session, session_id) -> list[dict]:
+    rows = (
+        db.query(Message)
+        .filter(Message.session_id == session_id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+        .all()
+    )[::-1]
+    return [{"role": r.role, "content": r.content} for r in rows if r.content]
+
+
+def _base_state(db, session, question: str, history: list[dict], message_id) -> dict:
+    """编排期注入：节点共用同一个 DB 事务 + 会话对象与用户身份。"""
+    return {
+        "question": question, "history": history, "steps": [],
+        "intent": None, "chunks": [], "answer": None, "refused": False,
+        "card": None, "order_no": None, "sentiment": None, "session_status": None,
+        "db": db, "session_obj": session, "user_id": session.user_id,
+        "message_id": message_id,
+    }
 
 
 @router.post("/sessions", response_model=SessionOut, status_code=201)
@@ -32,6 +71,13 @@ def create_session(body: CreateSessionRequest, db: Session = Depends(get_db)):
         user = db.get(User, body.user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="user not found")
+    elif body.user_external_id:
+        user = db.scalar(select(User).where(User.external_id == body.user_external_id))
+        if user is None:
+            user = User(external_id=body.user_external_id,
+                        nickname=f"顾客{uuid.uuid4().hex[:6]}")
+            db.add(user)
+            db.flush()
     else:
         user = User(nickname=f"顾客{uuid.uuid4().hex[:6]}")
         db.add(user)
@@ -54,39 +100,35 @@ def get_session(session_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.post("/sessions/{session_id}/messages", response_model=list[MessageOut], status_code=201)
 def send_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session = Depends(get_db)):
+    """同步接口：整图跑完一次性返回（后台任务/脚本友好）。"""
     session = db.get(ChatSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
 
-    # 1. 取最近10条历史（此刻还不含本条），喂给图
-    history_rows = (
-        db.query(Message)
-        .filter(Message.session_id == session.id)
-        .order_by(Message.created_at.desc())
-        .limit(10)
-        .all()
-    )[::-1]
-    history = [{"role": r.role, "content": r.content} for r in history_rows]
-
-    # 2. 存顾客消息
-    customer_msg = Message(session_id=session.id, role="customer", content=body.content)
+    history = _build_history(db, session_id)
+    customer_msg = Message(session_id=session_id, role="customer", content=body.content)
     db.add(customer_msg)
+    db.flush()
 
-    # 3. 跑状态机（真实调用 LLM，要等几秒）
-    result = supervisor.invoke({"question": body.content, "history": history, "steps": []})
+    result = supervisor.invoke(_base_state(db, session, body.content, history, customer_msg.id))
 
-    # 4. 存 AI 回复
+    intent = result.get("intent")
+    card = result.get("card")
     agent_msg = Message(
-        session_id=session.id,
-        role="agent",
-        content=result["answer"],
-        agent_source="knowledge" if result["intent"] == "faq" else None,
+        session_id=session_id, role="agent",
+        content=result.get("answer"),
+        content_type="card" if card else "text",
+        card_data=card,
+        agent_source={"faq": "knowledge", "order_query": "order", "refund": "resolution"}.get(intent),
     )
     db.add(agent_msg)
 
-    # 5. 更新会话：最后消息时间 + 步数累计（预算机制的雏形）
     session.last_message_at = datetime.now(timezone.utc)
-    session.steps_used = session.steps_used + len(result["steps"])
+    session.steps_used = (session.steps_used or 0) + len(result.get("steps", []))
+    if result.get("session_status"):
+        session.status = result["session_status"]
+    if result.get("refused"):
+        session.escalated_reason = "refusal"
 
     db.commit()
     db.refresh(customer_msg)
@@ -107,15 +149,34 @@ def list_messages(session_id: uuid.UUID, db: Session = Depends(get_db)):
     )
     return MessagePage(items=msgs, total=len(msgs), page=1, page_size=20)
 
-# ---------- SSE 流式接口（W1 版） ----------
 
-REFUSAL_TEXT = "抱歉，这个问题我需要转人工处理。"
+@router.post("/sessions/{session_id}/rate", response_model=SessionOut)
+def rate_session(session_id: uuid.UUID, body: RateRequest, db: Session = Depends(get_db)):
+    if body.rating not in (1, -1):
+        raise HTTPException(status_code=422, detail="rating 必须是 1 或 -1")
+    session = db.get(ChatSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    session.satisfaction = body.rating
+    db.commit()
+    db.refresh(session)
+    return session
 
 
-def sse_event(event: str, data: dict) -> str:
-    """把一条数据编码成 SSE 协议的一帧。"""
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+@router.post("/sessions/{session_id}/escalate", response_model=SessionOut)
+def escalate_session(session_id: uuid.UUID, db: Session = Depends(get_db)):
+    """铁律（DESIGN §4.3）：用户点"转人工"永远直接转，绝不允许机器人拦一道。"""
+    session = db.get(ChatSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    session.status = "escalated"
+    session.escalated_reason = "user_request"
+    db.commit()
+    db.refresh(session)
+    return session
 
+
+# ---------- SSE 流式接口（W2 版：三路由 + 卡片 + 审批事件） ----------
 
 @router.post("/sessions/{session_id}/messages/stream")
 def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session = Depends(get_db)):
@@ -124,41 +185,103 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
         raise HTTPException(status_code=404, detail="session not found")
 
     def generate():
-        agent_id = uuid.uuid4()  # 提前生成：turn_start 和 message_delta 都要引用它
+        agent_id = uuid.uuid4()
 
-        # 1. 顾客消息入库（和机器回答最后一起 commit）
+        # 历史快照先于本条消息落库（不含当前问题，避免重复）
+        history = _build_history(db, session_id)
         customer_msg = Message(session_id=session_id, role="customer",
                                content=body.content, content_type="text", status="sent")
         db.add(customer_msg)
+        db.flush()
         yield sse_event("turn_start", {"message_id": str(agent_id)})
 
-        # 2. triage：关键词检索（与图的 triage 节点同一套逻辑）
-        chunks = kb.retrieve(body.content)
+        # 1) 分诊（LLM，失败自动关键词兜底）
+        state = _base_state(db, session, body.content, history, customer_msg.id)
+        state = {**state, **triage_node(state)}
+        intent = state["intent"]
+        agent_source, card, session_status = None, None, None
 
-        if chunks:
+        # 2) 按意图路由
+        if intent == "faq":
             yield sse_event("agent_status", {"agent": "knowledge", "status": "working"})
-            pieces = []
-            for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks)):
-                pieces.append(token)
-                yield sse_event("message_delta", {"message_id": str(agent_id), "delta": token})
-            answer = "".join(pieces)
+            answer = None
+            with Timer() as t:
+                chunks = kb.retrieve(body.content)
+                if chunks:
+                    pieces = []
+                    try:
+                        for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks)):
+                            pieces.append(token)
+                            yield sse_event("message_delta", {"message_id": str(agent_id), "delta": token})
+                        answer = "".join(pieces)
+                    except Exception as exc:  # noqa: BLE001 —— 流挂了走拒答，不裸抛
+                        log_run(db, session.id, "knowledge", "knowledge",
+                                input_summary={"question": body.content[:200]},
+                                output=None, status="failed", error=str(exc),
+                                message_id=customer_msg.id, used_llm=True)
+            if answer and not knowledge_agent.is_refusal(answer):
+                agent_source = "knowledge"
+                log_run(db, session.id, "knowledge", "knowledge",
+                        input_summary={"question": body.content[:200], "chunks": [c["id"] for c in chunks]},
+                        output={"answer": answer[:300]}, latency_ms=t.ms,
+                        message_id=customer_msg.id, used_llm=True)
+                log_run(db, session.id, "supervisor", "respond",
+                        input_summary=None, output={"delivered": True},
+                        message_id=customer_msg.id)
+            else:
+                answer = REFUSAL_TEXT
+                log_run(db, session.id, "supervisor", "respond",
+                        input_summary=None, output={"refused": True},
+                        message_id=customer_msg.id)
             yield sse_event("agent_status", {"agent": "knowledge", "status": "done"})
             steps = ["triage", "knowledge", "respond"]
+
+        elif intent in ("order_query", "refund"):
+            node, node_name = (order_node, "order") if intent == "order_query" else (resolution_node, "resolution")
+            yield sse_event("agent_status", {"agent": node_name, "status": "working"})
+            out = node(state)
+            answer, card = out.get("answer"), out.get("card")
+            session_status = out.get("session_status")
+            agent_source = node_name
+            yield sse_event("message_delta", {"message_id": str(agent_id), "delta": answer})
+            yield sse_event("agent_status", {"agent": node_name, "status": "done"})
+            log_run(db, session.id, "supervisor", "respond",
+                    input_summary=None, output={"delivered": True, "card": bool(card)},
+                    message_id=customer_msg.id)
+            steps = ["triage", node_name, "respond"]
+
         else:
             answer = REFUSAL_TEXT
+            log_run(db, session.id, "supervisor", "respond",
+                    input_summary=None, output={"refused": True},
+                    message_id=customer_msg.id)
             yield sse_event("message_delta", {"message_id": str(agent_id), "delta": answer})
             steps = ["triage", "respond"]
 
-        # 3. 收尾落库：机器回答 + 会话统计（口径与同步接口一致）
-        agent_msg = Message(id=agent_id, session_id=session_id, role="agent",
-                            content=answer, content_type="text", status="sent",
-                            agent_source="knowledge" if chunks else None)
+        # 3) 落库：机器消息（可能带卡片）+ 会话统计
+        agent_msg = Message(
+            id=agent_id, session_id=session_id, role="agent",
+            content=answer, content_type="card" if card else "text",
+            card_data=card, agent_source=agent_source, status="sent",
+        )
         db.add(agent_msg)
         session.last_message_at = datetime.now(timezone.utc)
-        session.steps_used = session.steps_used + len(steps)
+        session.steps_used = (session.steps_used or 0) + len(steps)
+        if session_status:
+            session.status = session_status
         db.commit()
         db.refresh(agent_msg)
 
+        # 4) 协议事件：卡片 → 审批横幅 → 会话状态 → 完成 → 收尾
+        if card:
+            yield sse_event("card", {"message_id": str(agent_id), "card_data": card})
+        if card and card.get("type") == "refund" and card.get("status") in ("pending_approval", "pending"):
+            yield sse_event("approval_pending", {
+                "approval_id": card.get("approval_id"),
+                "summary": f"退款 ¥{card.get('amount', 0):.2f} 待审批",
+                "timeout_at": card.get("timeout_at"),
+            })
+            yield sse_event("session_status", {"status": "waiting_approval"})
         yield sse_event("message_completed",
                         {"message": MessageOut.model_validate(agent_msg).model_dump(mode="json")})
         yield sse_event("turn_end", {"message_id": str(agent_id), "steps": steps})
