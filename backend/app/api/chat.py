@@ -17,6 +17,7 @@ from app.graph.supervisor import supervisor
 from app.models import ChatSession, Message, User
 from app.schemas.message import MessageOut, MessagePage
 from app.schemas.session import SessionOut
+from app.services import escalation as escalation_svc
 from app.services import kb, llm
 from app.services.runs import Timer, log_run
 
@@ -110,6 +111,25 @@ def send_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session = 
     db.add(customer_msg)
     db.flush()
 
+    # 升级硬规则前置闸（W3）：命中直接转人工，不进状态机
+    user = db.get(User, session.user_id)
+    hit, reason = escalation_svc.evaluate(db, session, user, body.content)
+    if hit:
+        session.status = "escalated"
+        session.escalated_reason = reason
+        agent_msg = Message(session_id=session_id, role="agent",
+                            content=escalation_svc.ESCALATION_REPLY)
+        db.add(agent_msg)
+        session.last_message_at = datetime.now(timezone.utc)
+        session.steps_used = (session.steps_used or 0) + 1
+        log_run(db, session.id, "supervisor", "escalation",
+                input_summary={"question": body.content[:200]},
+                output={"escalated": True, "reason": reason}, message_id=customer_msg.id)
+        db.commit()
+        db.refresh(customer_msg)
+        db.refresh(agent_msg)
+        return [customer_msg, agent_msg]
+
     result = supervisor.invoke(_base_state(db, session, body.content, history, customer_msg.id))
 
     intent = result.get("intent")
@@ -194,6 +214,34 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
         db.add(customer_msg)
         db.flush()
         yield sse_event("turn_start", {"message_id": str(agent_id)})
+
+        # 升级硬规则前置闸（W3）：命中直接转人工
+        user = db.get(User, session.user_id)
+        hit, reason = escalation_svc.evaluate(db, session, user, body.content)
+        if hit:
+            session.status = "escalated"
+            session.escalated_reason = reason
+            answer, card, agent_source = escalation_svc.ESCALATION_REPLY, None, None
+            log_run(db, session.id, "supervisor", "escalation",
+                    input_summary={"question": body.content[:200]},
+                    output={"escalated": True, "reason": reason}, message_id=customer_msg.id)
+            yield sse_event("message_delta", {"message_id": str(agent_id), "delta": answer})
+            yield sse_event("escalated", {"reason": reason})
+            yield sse_event("session_status", {"status": "escalated"})
+            steps = ["escalation"]
+            agent_msg = Message(
+                id=agent_id, session_id=session_id, role="agent",
+                content=answer, content_type="text", status="sent",
+            )
+            db.add(agent_msg)
+            session.last_message_at = datetime.now(timezone.utc)
+            session.steps_used = (session.steps_used or 0) + len(steps)
+            db.commit()
+            db.refresh(agent_msg)
+            yield sse_event("message_completed",
+                            {"message": MessageOut.model_validate(agent_msg).model_dump(mode="json")})
+            yield sse_event("turn_end", {"message_id": str(agent_id), "steps": steps})
+            return
 
         # 1) 分诊（LLM，失败自动关键词兜底）
         state = _base_state(db, session, body.content, history, customer_msg.id)

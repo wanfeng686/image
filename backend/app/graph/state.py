@@ -17,6 +17,11 @@ class AgentState(TypedDict):
     sentiment: float | None       # triage 情绪分（1~5）
     session_status: str | None    # 节点要求变更的会话状态（waiting_approval 等）
 
+    # ── W3 扩展：质检回环 ──
+    qc_passed: bool               # 质检是否通过（超限降级时视为流程终结）
+    qc_feedback: str | None       # 打回时的问题清单（知识节点据此重写）
+    rewrite_count: int            # 已打回次数（上限 2）
+
     # ── 编排期注入（非业务状态：DB 会话、用户身份等运行时依赖）──
     db: Any                       # SQLAlchemy Session（由端点注入，节点共用一个事务）
     session_obj: Any              # ChatSession ORM 对象

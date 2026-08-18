@@ -35,6 +35,7 @@ def request_refund_approval(
 
     rules = load_rules(db)
     timeout_hours = float(rules.get("approval_timeout_hours", {}).get("hours", 4))
+    prev_status = order.status  # 记住驳回/超时要回滚的状态
 
     req = ApprovalRequest(
         session_id=session.id,
@@ -44,6 +45,7 @@ def request_refund_approval(
             "order_no": order.order_no,
             "amount": float(order.amount),
             "reason": (reason or "")[:200],
+            "prev_status": prev_status,
         },
         risk_score=Decimal(str(score)),
         risk_breakdown=breakdown,
@@ -95,3 +97,11 @@ def execute_refund(
     db.add(row)
     db.flush()
     return row, True
+
+
+def revert_refund_request(db: Session, req: ApprovalRequest) -> None:
+    """驳回/超时回滚：订单状态还原到申请前（prev_status），不动资金账。"""
+    order_no = req.action_payload.get("order_no")
+    order = db.scalar(select(MockOrder).where(MockOrder.order_no == order_no))
+    if order and order.status == "refunding":
+        order.status = req.action_payload.get("prev_status") or "paid"

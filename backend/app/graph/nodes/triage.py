@@ -30,12 +30,15 @@ def triage_node(state: dict) -> dict:
     intent = triage_agent.pick_primary(result["intents"])
     order_no = result.get("order_no") or slots.get("last_order_id")
 
-    # 槽位回写：记住最近提到的订单号（指代消解的基础）
+    # 槽位回写：记住最近提到的订单号（指代消解的基础）+ 意图快照（运营台图表用）
     if session is not None:
         if order_no:
             session.slots = {**slots, "last_order_id": order_no}
         if result.get("sentiment") is not None:
             session.sentiment = result["sentiment"]
+        session.last_intent = {"intents": result["intents"],
+                               "sentiment": result["sentiment"],
+                               "urgency": result["urgency"]}
 
     log_run(
         db, session.id if session else None, "triage", "triage",

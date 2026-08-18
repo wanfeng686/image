@@ -15,7 +15,15 @@ def knowledge_node(state: dict) -> dict:
         answer = None
         if chunks:
             try:
-                answer = llm.chat(knowledge_agent.build_messages(question, chunks))
+                msgs = knowledge_agent.build_messages(question, chunks)
+                # 质检打回重写：带上问题清单二次生成（W3 回环）
+                if state.get("qc_feedback"):
+                    msgs = msgs + [{
+                        "role": "user",
+                        "content": f"你上一版回答未通过质检，问题：{state['qc_feedback']}。"
+                                   f"请严格依据知识片段重写，补全关键数字与限定条件，不要遗漏。",
+                    }]
+                answer = llm.chat(msgs)
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)
 
