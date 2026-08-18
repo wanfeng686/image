@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartSupport 运营台</title>
+<style>
+  :root {
+    --triage:#0EA5E9; --supervisor:#8B5CF6; --knowledge:#10B981; --order:#3B82F6;
+    --resolution:#F59E0B; --qc:#F43F5E; --human:#71717A; --primary:#4F46E5;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; background:#f1f3f8; color:#222; font-size:14px; }
+  a { color: var(--primary); }
+  /* ── 登录层 ── */
+  #login { position:fixed; inset:0; background:rgba(15,20,40,.55); display:flex; align-items:center; justify-content:center; z-index:99; }
+  #login[hidden] { display:none; }  /* 显式覆盖，否则 display:flex 会压过 hidden 属性 */
+  #login .card { background:#fff; border-radius:14px; padding:28px; width:320px; display:flex; flex-direction:column; gap:12px; }
+  #login h2 { font-size:17px; }
+  #login input { border:1px solid #d8dde8; border-radius:9px; padding:10px 12px; font-size:14px; }
+  #login button { border:none; background:var(--primary); color:#fff; border-radius:9px; padding:10px; font-size:14px; cursor:pointer; }
+  #login .hint { font-size:12px; color:#98a; }
+  /* ── 布局 ── */
+  header.top { background:#fff; border-bottom:1px solid #e5e8f0; padding:12px 22px; display:flex; align-items:center; gap:18px; position:sticky; top:0; z-index:9; }
+  header.top h1 { font-size:16px; }
+  header.top .who { margin-left:auto; font-size:13px; color:#667; }
+  header.top button { border:1px solid #d8dde8; background:#fff; border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12px; }
+  nav.tabs { display:flex; gap:4px; padding:10px 22px 0; background:#fff; border-bottom:1px solid #e5e8f0; }
+  nav.tabs button { border:none; background:transparent; padding:9px 14px; font-size:14px; color:#667; cursor:pointer; border-bottom:2px solid transparent; }
+  nav.tabs button.on { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+  nav.tabs button .badge { background:#F43F5E; color:#fff; border-radius:8px; font-size:11px; padding:0 6px; margin-left:4px; }
+  main { padding:20px 22px; max-width:1200px; margin:0 auto; }
+  section.page { display:none; }
+  section.page.on { display:block; }
+  .card { background:#fff; border-radius:12px; border:1px solid #e5e8f0; padding:16px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi .n { font-size:24px; font-weight:700; }
+  .kpi .l { font-size:12px; color:#889; margin-top:2px; }
+  h3.blk { font-size:14px; margin:16px 0 8px; color:#445; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:#889; font-weight:500; padding:8px 10px; border-bottom:1px solid #eef0f6; }
+  td { padding:8px 10px; border-bottom:1px solid #f3f5fa; vertical-align:top; }
+  tr:hover td { background:#f8f9fd; cursor:pointer; }
+  .pill { display:inline-block; border-radius:20px; padding:1px 9px; font-size:12px; }
+  .pill.active{background:#E0F2FE;color:#0369A1}.pill.waiting_approval{background:#FEF3C7;color:#92400E}
+  .pill.escalated{background:#FEE2E2;color:#991B1B}.pill.closed{background:#E5E7EB;color:#374151}
+  .pill.pending{background:#FEF3C7;color:#92400E}.pill.approved{background:#D1FAE5;color:#065F46}
+  .pill.rejected{background:#FEE2E2;color:#991B1B}.pill.returned{background:#E0E7FF;color:#3730A3}
+  .pill.expired{background:#E5E7EB;color:#555}.pill.published{background:#D1FAE5;color:#065F46}
+  .pill.draft{background:#FEF3C7;color:#92400E}.pill.offline{background:#E5E7EB;color:#555}
+  .pill.low{background:#D1FAE5;color:#065F46}.pill.medium{background:#FEF3C7;color:#92400E}.pill.high{background:#FEE2E2;color:#991B1B}
+  .btn { border:1px solid #d8dde8; background:#fff; border-radius:8px; padding:5px 11px; font-size:12.5px; cursor:pointer; }
+  .btn.pri { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .btn.ok { background:#059669; border-color:#059669; color:#fff; }
+  .btn.no { background:#DC2626; border-color:#DC2626; color:#fff; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .bar { height:8px; border-radius:4px; background:#eef0f6; overflow:hidden; }
+  .bar i { display:block; height:100%; border-radius:4px; }
+  /* 轨迹时间线 */
+  .tl { border-left:2px solid #e5e8f0; margin-left:8px; padding-left:16px; display:flex; flex-direction:column; gap:10px; }
+  .tl .step { position:relative; }
+  .tl .step::before { content:""; position:absolute; left:-21px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--c,#888); }
+  .tl .head { display:flex; gap:8px; align-items:center; font-size:12.5px; }
+  .tl .agent { color:var(--c,#888); font-weight:600; }
+  .tl .meta { color:#99a; font-size:11.5px; }
+  .tl .io { background:#f7f8fc; border-radius:8px; padding:6px 9px; font-size:11.5px; color:#556; margin-top:4px;
+            max-height:90px; overflow:auto; font-family:Consolas,monospace; white-space:pre-wrap; word-break:break-all; }
+  /* 会话详情 */
+  #detail { position:fixed; top:0; right:-640px; width:620px; height:100vh; background:#fff; z-index:50;
+            box-shadow:-8px 0 30px rgba(0,0,0,.15); transition:right .25s; display:flex; flex-direction:column; }
+  #detail.open { right:0; }
+  #detail .dhead { padding:14px 18px; border-bottom:1px solid #eef0f6; display:flex; align-items:center; }
+  #detail .dhead b { font-size:14px; }
+  #detail .dbody { flex:1; overflow-y:auto; padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
+  .msg { max-width:88%; border-radius:11px; padding:8px 12px; font-size:13px; white-space:pre-wrap; }
+  .msg.customer { align-self:flex-end; background:var(--primary); color:#fff; }
+  .msg.agent { align-self:flex-start; background:#f2f3f7; }
+  .msg .tag { font-size:10.5px; opacity:.65; display:block; margin-bottom:2px; }
+  .riskbox { display:flex; gap:10px; align-items:center; margin:6px 0; }
+  .riskbox .score { font-size:22px; font-weight:700; }
+  .findings .f { border:1px solid #e5e8f0; border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  textarea, select, input.txt { border:1px solid #d8dde8; border-radius:8px; padding:8px 10px; font-size:13px; width:100%; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .muted { color:#889; font-size:12px; }
+  .toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:#111827; color:#fff;
+           border-radius:9px; padding:9px 16px; font-size:13px; z-index:100; display:none; }
+</style>
+</head>
+<body>
+
+<div id="login" hidden>
+  <div class="card">
+    <h2>🎛️ SmartSupport 运营台</h2>
+    <input id="lu" placeholder="用户名（admin）">
+    <input id="lp" type="password" placeholder="密码（admin123）">
+    <button onclick="doLogin()">登录</button>
+    <div class="hint">种子账号：admin/admin123（管理员）· approver/op123456（审批员）</div>
+  </div>
+</div>
+
+<header class="top">
+  <h1>🎛️ SmartSupport 运营台</h1>
+  <a href="/" style="font-size:12.5px">← 顾客聊天窗</a>
+  <div class="who" id="who"></div>
+  <button onclick="logout()">退出</button>
+</header>
+<nav class="tabs">
+  <button data-p="overview" class="on">概览</button>
+  <button data-p="sessions">会话</button>
+  <button data-p="approvals">审批 <span class="badge" id="apBadge" style="display:none"></span></button>
+  <button data-p="kb">知识库</button>
+  <button data-p="insights">洞察</button>
+  <button data-p="settings">设置</button>
+</nav>
+
+<main>
+  <!-- P2 概览 -->
+  <section class="page on" id="p-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="row">
+      <div class="card" style="flex:1.4;min-width:320px">
+        <h3 class="blk" style="margin-top:0">近 7 天会话量</h3>
+        <div id="trend" style="display:flex;align-items:flex-end;gap:8px;height:120px"></div>
+      </div>
+      <div class="card" style="flex:1;min-width:260px">
+        <h3 class="blk" style="margin-top:0">Agent 调用分布</h3>
+        <div id="agents"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P3 会话 -->
+  <section class="page" id="p-sessions">
+    <div class="card">
+      <div class="row" style="margin-bottom:10px;align-items:center">
+        <select id="sFilter" onchange="loadSessions()" style="width:auto">
+          <option value="">全部状态</option>
+          <option value="active">AI 处理中</option>
+          <option value="waiting_approval">待审批</option>
+          <option value="escalated">已升级</option>
+          <option value="closed">已关闭</option>
+        </select>
+        <input id="sQ" class="txt" placeholder="按昵称搜索…" style="width:220px" onkeydown="if(event.key==='Enter')loadSessions()">
+        <button class="btn" onclick="loadSessions()">搜索</button>
+      </div>
+      <table><thead><tr><th>用户</th><th>状态</th><th>最近意图</th><th>消息数</th><th>满意度</th><th>最后活跃</th></tr></thead>
+      <tbody id="sRows"></tbody></table>
+    </div>
+  </section>
+
+  <!-- P4 审批 -->
+  <section class="page" id="p-approvals">
+    <div class="row" style="margin-bottom:12px;align-items:center">
+      <select id="aFilter" onchange="loadApprovals()" style="width:auto">
+        <option value="pending">待审</option><option value="approved">已批</option>
+        <option value="rejected">已拒</option><option value="returned">已驳回</option>
+        <option value="expired">已超时</option><option value="all">全部</option>
+      </select>
+      <button class="btn ok" onclick="batchApprove()">✅✅ 批量批准待审项</button>
+      <span class="muted" id="aCount"></span>
+    </div>
+    <div id="aList" style="display:flex;flex-direction:column;gap:12px"></div>
+  </section>
+
+  <!-- P5 知识库 -->
+  <section class="page" id="p-kb">
+    <div class="row">
+      <div class="card" style="flex:1.5;min-width:340px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b>文档</b>
+          <button class="btn pri" onclick="kbForm()">➕ 新建</button>
+        </div>
+        <table><thead><tr><th>编号</th><th>标题</th><th>状态</th><th>版本</th><th>生效期</th><th></th></tr></thead>
+        <tbody id="kbRows"></tbody></table>
+      </div>
+      <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:12px">
+        <div class="card"><b style="font-size:13px">🕳️ 缺口队列（拒答聚合）</b><div id="gaps" style="margin-top:8px"></div></div>
+        <div class="card"><b style="font-size:13px">📝 草稿审核（人工采纳才入库）</b><div id="drafts" style="margin-top:8px"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P6 洞察 -->
+  <section class="page" id="p-insights">
+    <div class="row" style="margin-bottom:12px;align-items:center">
+      <input type="date" id="iDate" class="txt" style="width:170px">
+      <button class="btn" onclick="loadInsight()">查看</button>
+      <button class="btn pri" onclick="regenInsight()">🔄 重新生成</button>
+    </div>
+    <div class="card" id="iBody"></div>
+  </section>
+
+  <!-- P7 设置 -->
+  <section class="page" id="p-settings">
+    <div class="row">
+      <div class="card" style="flex:1;min-width:300px">
+        <b style="font-size:13px">供应商（BYOM）</b>
+        <div id="provList" style="margin-top:8px"></div>
+      </div>
+      <div class="card" style="flex:1;min-width:300px">
+        <b style="font-size:13px">Agent 模型绑定</b>
+        <div id="bindList" style="margin-top:8px"></div>
+        <div class="muted" style="margin-top:6px">未绑定的 Agent 走 .env 默认供应商（deepseek）</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- P3 详情抽屉 -->
+<div id="detail">
+  <div class="dhead"><b id="dTitle"></b><button class="btn" style="margin-left:auto" onclick="detail(false)">关闭</button></div>
+  <div class="dbody" id="dBody"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = location.origin + "/api";
+let TOKEN = localStorage.getItem("ss_token") || "";
+let ME = null;
+const AGENT_COLOR = { triage:"var(--triage)", knowledge:"var(--knowledge)", order:"var(--order)",
+                      resolution:"var(--resolution)", qc:"var(--qc)", supervisor:"var(--supervisor)", insight:"#0EA5E9" };
+const AGENT_CN = { triage:"分诊", knowledge:"知识库", order:"订单", resolution:"处置",
+                   qc:"质检", supervisor:"协调", insight:"洞察", human:"人工" };
+
+function toast(t) { const el = document.getElementById("toast"); el.textContent = t; el.style.display = "block"; setTimeout(() => el.style.display = "none", 2200); }
+async function api(path, opts = {}) {
+  const r = await fetch(API + path, { ...opts, headers: { "Content-Type": "application/json",
+    ...(TOKEN ? { Authorization: "Bearer " + TOKEN } : {}), ...(opts.headers || {}) } });
+  if (r.status === 401) { showLogin(); throw new Error("未登录"); }
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail?.message || JSON.stringify(e.detail) || r.status); }
+  return r.json();
+}
+const fmt = s => s ? new Date(s).toLocaleString("zh-CN", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : "—";
+const esc = s => (s ?? "").toString().replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+/* ── 登录 ── */
+function showLogin() { document.getElementById("login").hidden = false; }
+async function doLogin() {
+  const r = await fetch(API + "/auth/login", { method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ username: lu.value, password: lp.value }) });
+  if (!r.ok) { toast("用户名或密码错误"); return; }
+  const body = await r.json();
+  TOKEN = body.token; ME = body.operator;
+  localStorage.setItem("ss_token", TOKEN);
+  document.getElementById("login").hidden = true;
+  who.textContent = `${ME.display_name}（${ME.role}）`;
+  refreshAll();
+}
+function logout() { TOKEN = ""; ME = null; localStorage.removeItem("ss_token"); showLogin(); }
+
+/* ── Tab 切换 ── */
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav.tabs button, section.page").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); document.getElementById("p-" + b.dataset.p).classList.add("on");
+});
+
+function refreshAll() { loadOverview(); loadSessions(); loadApprovals(); loadKb(); loadInsight(); loadSettings(); }
+
+/* ── P2 概览 ── */
+async function loadOverview() {
+  const d = await api("/console/dashboard/overview?range=7d");
+  const k = d.kpis;
+  kpis.innerHTML = [
+    ["会话量", k.sessions], ["升级率", Math.round(k.escalation_rate * 100) + "%"],
+    ["待审批", k.pending_approvals], ["LLM 调用", k.llm_calls],
+  ].map(([l, n]) => `<div class="card kpi"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  const max = Math.max(...d.charts.trend.map(t => t.sessions), 1);
+  trend.innerHTML = d.charts.trend.map(t =>
+    `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+       <div style="width:70%;height:${t.sessions / max * 90}px;background:var(--primary);border-radius:4px 4px 0 0;opacity:.85"></div>
+       <div style="font-size:10.5px;color:#889">${t.date.slice(5)}</div></div>`).join("");
+  const amax = Math.max(...d.charts.agent_calls.map(a => a.count), 1);
+  agents.innerHTML = d.charts.agent_calls.map(a =>
+    `<div style="margin-bottom:8px">
+       <div style="font-size:12px;margin-bottom:2px">${AGENT_CN[a.agent] || a.agent} · ${a.count}</div>
+       <div class="bar"><i style="width:${a.count / amax * 100}%;background:${AGENT_COLOR[a.agent] || "#888"}"></i></div>
+     </div>`).join("") || "<div class='muted'>暂无调用</div>";
+}
+
+/* ── P3 会话 ── */
+async function loadSessions() {
+  const st = sFilter.value, q = sQ.value.trim();
+  const d = await api(`/console/sessions?status=${st}&q=${encodeURIComponent(q)}`);
+  sRows.innerHTML = d.items.map(s => `<tr onclick="openDetail('${s.id}')">
+    <td>${esc(s.user.nickname)}</td>
+    <td><span class="pill ${s.status}">${{active:"AI处理",waiting_approval:"待审批",escalated:"已升级",closed:"已关闭"}[s.status] || s.status}</span>
+        ${s.has_pending_approval ? " <span style='color:#B45309'>●</span>" : ""}</td>
+    <td class="muted">${esc((s.last_intent?.intents || []).join(",")) || "—"}</td>
+    <td>${s.message_count}</td>
+    <td>${s.satisfaction === 1 ? "👍" : s.satisfaction === -1 ? "👎" : "—"}</td>
+    <td class="muted">${fmt(s.last_message_at)}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">暂无会话</td></tr>`;
+}
+async function openDetail(id) {
+  const d = await api("/console/sessions/" + id);
+  dTitle.textContent = `会话 ${d.session.status}`;
+  let h = `<div class="card"><div class="row" style="gap:8px">
+      <span class="pill ${d.session.status}">${d.session.status}</span>
+      <span class="muted">情绪 ${d.session.sentiment ?? "—"} · 步数 ${d.session.steps_used}/30 · 槽位 ${esc(JSON.stringify(d.session.slots || {}))}</span>
+      ${d.session.escalated_reason ? `<span class="pill high">升级原因: ${d.session.escalated_reason}</span>` : ""}
+      ${d.session.taken_over_by ? `<span class="pill offline">已接管: ${esc(d.session.taken_over_by)}</span>` : ""}
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn" onclick="takeover('${id}')">🖐️ 强制接管</button>
+    </div></div>`;
+  h += `<h3 class="blk">对话流</h3>` + d.messages.map(m => {
+    const tag = m.agent_source ? `<span class="tag">${AGENT_CN[m.agent_source] || m.agent_source}</span>` : "";
+    const card = m.card_data ? `<div style="background:#fff;border:1px solid #e5e8f0;border-radius:9px;padding:8px 10px;margin-top:5px;font-size:12px">${esc(JSON.stringify(m.card_data))}</div>` : "";
+    return `<div class="msg ${m.role === "customer" ? "customer" : "agent"}">${tag}${esc(m.content)}${card}</div>`;
+  }).join("");
+  h += `<h3 class="blk">Agent 轨迹时间线（${d.agent_runs.length} 步）</h3><div class="tl">` +
+    d.agent_runs.map(r => {
+      const c = AGENT_COLOR[r.agent_name] || "#888";
+      const io = r.input || r.output ? `<div class="io">IN  ${esc(JSON.stringify(r.input))}\nOUT ${esc(JSON.stringify(r.output))}</div>` : "";
+      return `<div class="step" style="--c:${c}">
+        <div class="head"><span class="agent">${AGENT_CN[r.agent_name] || r.agent_name}</span>
+          <span class="pill ${r.status === "success" ? "approved" : r.status === "rejected" ? "rejected" : "returned"}">${r.status}</span>
+          <span class="meta">${r.graph_node || ""} ${r.latency_ms ?? "—"}ms ${r.model_name ? "· " + r.model_name : ""}</span></div>${io}</div>`;
+    }).join("") + `</div>`;
+  if (d.notes.length) h += `<h3 class="blk">内部备注</h3>` + d.notes.map(n =>
+    `<div class="card" style="padding:8px 12px"><b>${esc(n.operator)}</b>：<span class="muted">${fmt(n.created_at)}</span><br>${esc(n.content)}</div>`).join("");
+  h += `<div class="row" style="margin-top:10px"><textarea id="noteTxt" rows="2" placeholder="添加内部备注…"></textarea>
+        <button class="btn pri" onclick="addNote('${id}')">📝 保存备注</button></div>`;
+  dBody.innerHTML = h;
+  detail(true);
+}
+async function takeover(id) { await api(`/console/sessions/${id}/takeover`, { method:"POST" }); toast("已接管，会话转为人工"); openDetail(id); loadSessions(); }
+async function addNote(id) { if (!noteTxt.value.trim()) return;
+  await api(`/console/sessions/${id}/notes`, { method:"POST", body: JSON.stringify({ content: noteTxt.value }) });
+  toast("备注已保存"); openDetail(id); }
+function detail(open) { document.getElementById("detail").classList.toggle("open", open); }
+
+/* ── P4 审批 ── */
+async function loadApprovals() {
+  const d = await api(`/console/approvals?status=${aFilter.value}`);
+  aCount.textContent = `共 ${d.total} 条`;
+  apBadge.style.display = "none";
+  if (aFilter.value === "pending") {
+    api("/console/approvals?status=pending").then(x => {
+      if (x.total > 0) { apBadge.textContent = x.total; apBadge.style.display = "inline"; }
+    });
+  }
+  aList.innerHTML = d.items.map(a => {
+    const p = a.action_payload || {};
+    const bd = a.risk_breakdown || {};
+    return `<div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:15px;font-weight:600">退款 ¥${Number(p.amount || 0).toFixed(2)}
+            <span class="pill ${a.risk_level}">${a.risk_level}</span>
+            <span class="pill ${a.status}">${a.status}</span>
+            ${a.required_approvals > 1 ? `<span class="pill returned">双签 ${a.granted_approvals}/${a.required_approvals}</span>` : ""}</div>
+          <div class="muted" style="margin-top:4px">订单 ${esc(p.order_no)} · 会话 ${a.session_id.slice(0, 8)} · ${esc(p.reason || "")}</div>
+          <div class="muted" style="margin-top:2px">${esc(a.session_summary)}</div>
+          <div class="riskbox">
+            <span class="score">${a.risk_score}</span>
+            ${Object.entries(bd).map(([k, v]) =>
+              `<div style="flex:1"><div style="font-size:11px;color:#889">${{amount:"金额",freq:"频次",profile:"画像",sentiment:"情绪"}[k] || k} ${v}</div>
+               <div class="bar"><i style="width:${v}%;background:${{amount:"#3B82F6",freq:"#F59E0B",profile:"#8B5CF6",sentiment:"#F43F5E"}[k] || "#888"}"></i></div></div>`).join("")}
+          </div>
+          <div class="muted">⏰ ${fmt(a.timeout_at)} 超时</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn ok" onclick="act('${a.id}','approve')" ${a.status !== "pending" ? "disabled" : ""}>✅ 批准</button>
+          <button class="btn no" onclick="act('${a.id}','reject')" ${a.status !== "pending" ? "disabled" : ""}>❌ 拒绝</button>
+          <button class="btn" onclick="act('${a.id}','return')" ${a.status !== "pending" ? "disabled" : ""}>💬 驳回</button>
+          <button class="btn" onclick="act('${a.id}','remind')" ${a.status !== "pending" ? "disabled" : ""}>🔔 催办</button>
+        </div>
+      </div></div>`;
+  }).join("") || "<div class='card muted'>该状态下暂无审批</div>";
+}
+async function act(id, action) {
+  let note = null;
+  if (action === "reject") { note = prompt("拒绝理由（必填）："); if (!note) return; }
+  if (action === "return") { note = prompt("需要顾客补充的信息：") || ""; }
+  try {
+    const r = await api(`/console/approvals/${id}/${action}`, { method: "POST", body: JSON.stringify({ note }) });
+    if (action === "approve") toast(r.executed_action ? "已批准并执行退款 ✅（顾客已收到通知）"
+      : `已批准（${r.approval.granted_approvals}/${r.approval.required_approvals}，等待双签）`);
+    else toast("已处理：" + action);
+  } catch (e) { toast("失败：" + e.message); }
+  loadApprovals(); loadOverview();
+}
+async function batchApprove() {
+  const d = await api("/console/approvals?status=pending");
+  if (!d.items.length) { toast("没有待审项"); return; }
+  const r = await api("/console/approvals/batch-approve", { method: "POST",
+    body: JSON.stringify({ ids: d.items.map(i => i.id), note: "批量处理" }) });
+  toast(`批量批准：成功 ${r.succeeded.length} / 失败 ${r.failed.length}`);
+  loadApprovals(); loadOverview();
+}
+
+/* ── P5 知识库 ── */
+async function loadKb() {
+  const d = await api("/console/kb/documents");
+  kbRows.innerHTML = d.items.map(x => `<tr>
+    <td><b>${esc(x.code)}</b></td><td>${esc(x.title)}</td>
+    <td><span class="pill ${x.status}">${x.status}</span></td><td>v${x.version ?? "—"}</td>
+    <td class="muted">${x.effective_from ?? ""} ~ ${x.effective_to ?? "长期"}</td>
+    <td style="white-space:nowrap">
+      <button class="btn" onclick='kbForm(${JSON.stringify(x).replace(/'/g,"&#39;")})'>✏️</button>
+      <button class="btn ok" onclick="kbPub('${x.id}')">⬆️ 发布</button>
+      <button class="btn no" onclick="kbOff('${x.id}')">⬇️ 下线</button></td></tr>`).join("");
+  const g = await api("/console/kb/gaps");
+  gaps.innerHTML = g.items.slice(0, 6).map(x =>
+    `<div style="border-bottom:1px solid #f0f2f8;padding:7px 0;display:flex;justify-content:space-between;gap:8px">
+       <span style="font-size:12.5px">${esc(x.question_digest)}</span>
+       <span style="white-space:nowrap"><span class="muted">×${x.frequency}</span>
+       <button class="btn" onclick="genDraft('${x.id}')">✨ 草稿</button></span></div>`).join("") || "<div class='muted'>暂无缺口</div>";
+  const dr = await api("/console/kb/drafts");
+  drafts.innerHTML = dr.items.map(x =>
+    `<div style="border-bottom:1px solid #f0f2f8;padding:7px 0">
+       <b style="font-size:12.5px">${esc(x.title)}</b> <span class="pill ${x.status === "pending_review" ? "draft" : x.status === "adopted" ? "published" : "offline"}">${x.status}</span>
+       <div class="muted" style="margin:3px 0">${esc((x.content || "").slice(0, 80))}…</div>
+       ${x.status === "pending_review" ? `<button class="btn ok" onclick="draftAct('${x.id}','adopt')">✅ 采纳发布</button>
+                                          <button class="btn no" onclick="draftAct('${x.id}','reject')">❌ 驳回</button>` : ""}</div>`).join("")
+    || "<div class='muted'>暂无草稿</div>";
+}
+function kbForm(x) {
+  const d = x || { title: "", category: "policy", content: "" };
+  const t = prompt("标题：", d.title); if (t === null) return;
+  const c = prompt("正文（含数字与限定条件）：", d.content); if (c === null) return;
+  const req = { title: t, category: d.category || "policy", content: c };
+  const p = d.id ? api("/console/kb/documents/" + d.id, { method: "PUT", body: JSON.stringify(req) })
+                 : api("/console/kb/documents", { method: "POST", body: JSON.stringify(req) });
+  p.then(() => { toast("已保存（发布后生效）"); loadKb(); }).catch(e => toast(e.message));
+}
+async function kbPub(id) { try { await api(`/console/kb/documents/${id}/publish`, { method: "POST" }); toast("已发布，检索立即生效"); loadKb(); } catch (e) { toast(e.message); } }
+async function kbOff(id) { await api(`/console/kb/documents/${id}/offline`, { method: "POST" }); toast("已下线"); loadKb(); }
+async function genDraft(id) { try { await api(`/console/kb/gaps/${id}/generate-draft`, { method: "POST" }); toast("草稿已生成，待人工审核"); loadKb(); } catch (e) { toast(e.message); } }
+async function draftAct(id, a) { await api(`/console/kb/drafts/${id}/${a}`, { method: "POST" }); toast(a === "adopt" ? "已采纳并发布 ✅" : "已驳回"); loadKb(); }
+
+/* ── P6 洞察 ── */
+iDate.value = new Date().toISOString().slice(0, 10);
+async function loadInsight() {
+  const d = await api(`/console/insights?day=${iDate.value}`);
+  if (d.status === "not_generated") { iBody.innerHTML = "<div class='muted'>当日尚未生成，点「重新生成」创建。</div>"; return; }
+  const m = d.metrics || {};
+  iBody.innerHTML = `
+    <div class="row" style="margin-bottom:10px">
+      ${[["会话", m.sessions], ["升级", m.escalated], ["拒答", m.refusals], ["LLM调用", m.llm_calls]]
+        .map(([l, n]) => `<div class="kpi"><div class="n">${n ?? "—"}</div><div class="l">${l}</div></div>`).join("")}
+    </div>
+    <p style="line-height:1.7">${esc(d.summary)}</p>
+    <div class="findings">${(d.findings || []).map(f => `
+      <div class="f"><b>${f.severity === "critical" ? "🔴" : f.severity === "warning" ? "🟡" : "🔵"} ${esc(f.title)}</b>
+        <div class="muted" style="margin:4px 0">${esc(f.detail)}</div>
+        ${f.status === "new" ? `<button class="btn ok" onclick="findingAct('${f.id}','apply')">⚡ 应用建议</button>
+                                <button class="btn" onclick="findingAct('${f.id}','ignore')">🚫 忽略</button>`
+                             : `<span class="pill offline">${f.status}</span>`}</div>`).join("")}</div>`;
+}
+async function regenInsight() { toast("生成中…"); await api("/console/insights/regenerate?day=" + iDate.value, { method: "POST" }); loadInsight(); toast("日报已生成"); }
+async function findingAct(id, a) { await api(`/console/insights/findings/${id}/${a}`, { method: "POST" }); loadInsight(); }
+
+/* ── P7 设置 ── */
+async function loadSettings() {
+  const ps = await api("/console/settings/providers");
+  provList.innerHTML = ps.items.map(p => `<div style="border-bottom:1px solid #f0f2f8;padding:8px 0;display:flex;align-items:center;gap:8px">
+      <b>${esc(p.name)}</b><span class="muted">${esc(p.base_url)}</span>
+      <span class="muted">${esc(p.api_key_masked || "无key")}</span>
+      <span class="pill ${p.last_test_status === "ok" ? "approved" : p.last_test_status ? "rejected" : "offline"}">${p.last_test_status || "未测试"}</span>
+      <button class="btn" style="margin-left:auto" onclick="testProv(${p.id})">🔌 测试</button></div>`).join("");
+  const bs = await api("/console/settings/bindings");
+  bindList.innerHTML = (bs.items.length ? bs.items.map(b => `<div style="border-bottom:1px solid #f0f2f8;padding:8px 0">
+      <span style="color:${AGENT_COLOR[b.agent_name] || "#888"};font-weight:600">${AGENT_CN[b.agent_name] || b.agent_name}</span>
+      → ${esc(b.provider)} / ${esc(b.model_name)} <span class="muted">t=${b.temperature ?? 0}</span></div>`).join("")
+    : "<div class='muted'>未配置绑定，全部走默认供应商</div>");
+}
+async function testProv(id) { toast("测试中…"); const r = await api(`/console/settings/providers/${id}/test`, { method: "POST" }); toast(r.ok ? "连接正常 ✅" : "失败：" + r.error); loadSettings(); }
+
+/* ── 启动 ── */
+(async () => {
+  if (!TOKEN) { showLogin(); return; }
+  try { ME = await api("/auth/me"); who.textContent = `${ME.display_name}（${ME.role}）`; refreshAll(); }
+  catch { showLogin(); }
+})();
+</script>
+</body>
+</html>

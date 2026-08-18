@@ -50,14 +50,15 @@ alembic upgrade head && python scripts/seed.py
 
 # 5. 启动
 uvicorn app.main:app --reload --port 8000
-# 聊天 UI:  http://127.0.0.1:8000/     （已绑定演示顾客，订单 SO-0001/2/3）
-# API 文档: http://127.0.0.1:8000/docs  运营账号 admin/admin123, approver/op123456
+# 聊天 UI:  http://127.0.0.1:8000/           （已绑定演示顾客，订单 SO-0001/2/3）
+# 运营台:   http://127.0.0.1:8000/console.html（admin/admin123 · approver/op123456）
+# API 文档: http://127.0.0.1:8000/docs
 ```
 
 ## 🎬 演示剧本（双角色）
 
 1. **标准流程**：`查订单 SO-0002` → 订单卡片 → `退货政策是什么` → 引用回答（QC 已检）
-2. **风控流程**：`SO-0001 退款`（¥49 自动通过）→ `SO-0002 退款`（进审批队列）→ 用 admin 在 `/docs` 调 `POST /api/console/approvals/{id}/approve` → 会话收到通过通知；`SO-0003 退款` 需**双签两次**
+2. **风控流程**：`SO-0001 退款`（¥49 自动通过）→ `SO-0002 退款`（进审批队列）→ 打开运营台审批队列**亲手点批准** → 顾客会话实时收到通过通知；`SO-0003 退款` 需**双签两次**
 3. **攻击流程**：`查订单 SO-2001`（他人订单 → 归属断言拦截）→ `我要去曝光你们`（硬规则直转人工）→ 注入话术（不执行任何资金动作）
 
 ## 🔒 安全设计与已知限制
@@ -70,7 +71,7 @@ uvicorn app.main:app --reload --port 8000
 | 质检共享盲区/遗漏条件/少量幻觉 | KB 版本+生效期过滤 + 确定性数字核对 + LLM 蕴含判定 |
 | 审批重放双退款 | 幂等键三处落位（审批表/执行表 UNIQUE + 业务查重） |
 
-**已知限制（诚实声明）**：运营台为 API 形态（前端 Console 页面在 Roadmap）；供应商 api_key 明文存库（演示项目，生产应 AES-GCM）；审批超时为惰性扫描（生产应 worker 定时任务）；Redis 已就位但 pub/sub 多端推送未接。
+**已知限制（诚实声明）**：运营台为零依赖静态页（React 重构在 Roadmap）；供应商 api_key 明文存库（演示项目，生产应 AES-GCM）；审批超时为惰性扫描（生产应 worker 定时任务）；Redis 已就位但 pub/sub 多端推送未接。
 
 ## 📊 Eval
 
@@ -78,7 +79,7 @@ uvicorn app.main:app --reload --port 8000
 
 ## 🗺️ Roadmap
 
-- 运营台前端（React P2-P8 页面）
+- 运营台 React 重构（Vite + TS + shadcn/ui，多端实时推送接 Redis pub/sub）
 - Qdrant 向量检索 + 查询改写 + 重排
 - 模型网关完整版（降级链/限流/成本记账）、worker 容器（APScheduler 定时任务）
 - 归因链四类分流（当前简化为 kb_gap 单类）、渠道适配器（微信/抖店 webhook）
