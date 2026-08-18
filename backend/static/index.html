@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartSupport 智能客服</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #eef1f5; height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .widget {
+    width: 420px; height: 640px; max-height: 92vh; background: #fff;
+    border-radius: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, .12);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .header { padding: 16px 20px; background: linear-gradient(135deg, #4f6ef2, #6a5af9); color: #fff; }
+  .header h1 { font-size: 17px; font-weight: 600; }
+  .header p { font-size: 12px; opacity: .8; margin-top: 3px; }
+  .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble {
+    max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14px;
+    line-height: 1.65; white-space: pre-wrap; word-break: break-word;
+  }
+  .customer { align-self: flex-end; background: #4f6ef2; color: #fff; border-bottom-right-radius: 4px; }
+  .agent { align-self: flex-start; background: #f2f3f7; color: #222; border-bottom-left-radius: 4px; }
+  .status {
+    align-self: flex-start; font-size: 12px; color: #888; padding: 2px 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4f6ef2; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .steps { align-self: flex-start; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; font-size: 11px; }
+  .steps span { background: #f2f3f7; color: #98a; border-radius: 4px; padding: 1px 6px; }
+  .steps i { font-style: normal; color: #c3c8d4; }
+  .inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #eceef2; }
+  .inputbar input {
+    flex: 1; border: 1px solid #dfe3ea; border-radius: 10px; padding: 10px 12px;
+    font-size: 14px; outline: none;
+  }
+  .inputbar input:focus { border-color: #4f6ef2; }
+  .inputbar button {
+    border: none; background: #4f6ef2; color: #fff; border-radius: 10px;
+    padding: 0 18px; font-size: 14px; cursor: pointer;
+  }
+  .inputbar button:disabled { background: #b9c3f7; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="header">
+    <h1>SmartSupport 智能客服</h1>
+    <p>知识库问答 · 逐字流式 · 超纲问题自动转人工</p>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="inputbar">
+    <input id="input" type="text" placeholder="输入问题，例如：退货政策是什么" autocomplete="off">
+    <button id="send">发送</button>
+  </div>
+</div>
+
+<script>
+const API = location.origin + "/api/chat";
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+let sessionId = null;
+let busy = false;
+
+function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+function addBubble(role, text = "") {
+  const el = document.createElement("div");
+  el.className = "bubble " + role;
+  el.textContent = text;   // textContent 而非 innerHTML：内容永远按纯文本渲染，天然防注入
+  messagesEl.appendChild(el);
+  scrollBottom();
+  return el;
+}
+
+function addStatus(text) {
+  const el = document.createElement("div");
+  el.className = "status";
+  el.innerHTML = '<span class="dot"></span>' + text;
+  messagesEl.appendChild(el);
+  scrollBottom();
+  return el;
+}
+
+function addSteps(steps) {
+  const el = document.createElement("div");
+  el.className = "steps";
+  el.innerHTML = steps.map(s => "<span>" + s + "</span>").join("<i>→</i>");
+  messagesEl.appendChild(el);
+  scrollBottom();
+}
+
+// 页面加载即开一个新会话（W1 简化：每个标签页一个独立会话）
+async function init() {
+  const resp = await fetch(API + "/sessions", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+  });
+  const session = await resp.json();
+  sessionId = session.id;
+  addBubble("agent", "您好，我是 SmartSupport 智能客服，请问有什么可以帮您？");
+}
+
+async function send() {
+  const content = inputEl.value.trim();
+  if (!content || busy || !sessionId) return;
+  busy = true; sendBtn.disabled = true; inputEl.value = "";
+  addBubble("customer", content);
+
+  try {
+    const resp = await fetch(API + "/sessions/" + sessionId + "/messages/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+
+    // EventSource 只支持 GET，POST 流式只能用 fetch 手动读流（ChatGPT 同款做法）
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "", bubble = null, statusEl = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      // SSE 帧以空行（\n\n）分隔；网络分块可能把一帧劈成两半，所以要在缓冲区里攒够再切
+      let i;
+      while ((i = buf.indexOf("\n\n")) !== -1) {
+        const frame = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        let event = "message", data = "";
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event: ")) event = line.slice(7).trim();
+          else if (line.startsWith("data: ")) data += line.slice(6);
+        }
+        const payload = data ? JSON.parse(data) : {};
+
+        if (event === "turn_start") {
+          bubble = addBubble("agent");
+        } else if (event === "agent_status") {
+          if (payload.status === "working") statusEl = addStatus("知识助手检索中…");
+          else if (statusEl) { statusEl.remove(); statusEl = null; }
+        } else if (event === "message_delta") {
+          bubble.textContent += payload.delta;   // 打字机：一帧一追加
+          scrollBottom();
+        } else if (event === "turn_end") {
+          addSteps(payload.steps);               // 轨迹可查：把执行步骤画成小标签
+        }
+        // message_completed：内容已由 delta 拼完，此事件留给将来"落库定格/断线恢复"用
+      }
+    }
+  } catch (e) {
+    addBubble("agent", "连接出现问题，请稍后重试。");
+  }
+  busy = false; sendBtn.disabled = false; inputEl.focus();
+}
+
+sendBtn.addEventListener("click", send);
+inputEl.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+init();
+inputEl.focus();
+</script>
+</body>
+</html>
