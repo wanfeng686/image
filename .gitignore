@@ -1,0 +1,13 @@
+# 机密文件，绝不上传
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+
+# 前端（以后用）
+node_modules/

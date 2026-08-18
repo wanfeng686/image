@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: smart-support-postgres
+    environment:
+      POSTGRES_USER: smartbot
+      POSTGRES_PASSWORD: smartbot_dev
+      POSTGRES_DB: smart_support
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U smartbot -d smart_support" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7
+    container_name: smart-support-redis
+    command: redis-server --requirepass smartbot_dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli --no-auth-warning -a smartbot_dev ping | grep PONG" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  postgres_data:
+  redis_data:
