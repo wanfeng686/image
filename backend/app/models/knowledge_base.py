@@ -11,9 +11,11 @@ from app.core.db import Base
 class KbDocument(Base):
     """知识库文档：版本化 + 生效期（检索过滤，防旧政策误导 QC/知识 Agent）。"""
     __tablename__ = "kb_documents"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_kbdocs_tenant_code"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    code: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)   # 引用编号 kb-001
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    code: Mapped[str] = mapped_column(String(16), nullable=False)                # 引用编号 kb-001（租户内唯一）
     title: Mapped[str] = mapped_column(String(128), nullable=False)
     category: Mapped[str | None] = mapped_column(String(32))                     # policy|product|faq|shipping
     status: Mapped[str] = mapped_column(String(16), default="draft")             # draft|published|offline

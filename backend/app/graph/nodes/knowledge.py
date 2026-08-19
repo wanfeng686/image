@@ -11,7 +11,7 @@ def knowledge_node(state: dict) -> dict:
 
     error = None
     with Timer() as t:
-        chunks = kb.retrieve(db, question) if db else []
+        chunks = kb.retrieve(db, session.tenant_id, question) if db else []
         answer = None
         if chunks:
             try:
@@ -23,7 +23,7 @@ def knowledge_node(state: dict) -> dict:
                         "content": f"你上一版回答未通过质检，问题：{state['qc_feedback']}。"
                                    f"请严格依据知识片段重写，补全关键数字与限定条件，不要遗漏。",
                     }]
-                answer = llm.chat(msgs, agent="knowledge")
+                answer = llm.chat(msgs, agent="knowledge", tenant_id=session.tenant_id)
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)
 

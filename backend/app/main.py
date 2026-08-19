@@ -10,11 +10,13 @@ from app.api.console import router as console_router
 from app.api.insights_api import router as insights_router
 from app.api.kbmgmt import router as kb_router
 from app.api.settings_api import router as settings_router
+from app.api.widget import router as widget_router
 
-app = FastAPI(title="SmartSupport API", version="0.1.0")
+app = FastAPI(title="SmartSupport API", version="0.2.0")
 app.include_router(auth_router)        # 运营台认证
-app.include_router(chat_router)        # 顾客端聊天
-app.include_router(console_router)     # 运营台（鉴权保护）
+app.include_router(chat_router)        # 顾客端聊天（X-Widget-Key 定租户）
+app.include_router(widget_router)      # Widget 接入（pk_ 密钥 + Origin 白名单）
+app.include_router(console_router)     # 运营台（鉴权保护，租户隔离）
 app.include_router(kb_router)          # 知识库管理 P5
 app.include_router(insights_router)    # 洞察日报 P6
 app.include_router(settings_router)    # 模型设置 P7-lite

@@ -1,7 +1,13 @@
-"""模拟电商种子数据：运营账号、风险规则、商品/订单/物流、演示用户。
+"""种子数据（SaaS 版）：演示租户 + 平台账号 + 租户内全套业务种子。
 
 幂等设计：按唯一键查存在即跳过，可反复执行。
 用法：python scripts/seed.py
+
+账号一览（演示用）：
+- 平台管理员   admin / admin123（跨租户）
+- 演示商城店长 shop / shop123（演示商城租户，商户视角）
+- 演示商城审批  approver / op123456（演示商城租户）
+- Widget 密钥   pk_demo000000000000 / API 密钥 sk_demo000000000000
 """
 import sys
 from datetime import datetime, timedelta, timezone
@@ -16,13 +22,22 @@ from app.core.db import SessionLocal
 from app.core.security import hash_password
 from app.models import (
     EscalationRule, EvalCase, KbDocument, KbDocumentVersion, MockOrder,
-    MockProduct, MockShipment, ModelProvider, Operator, RiskRule, User,
+    MockProduct, MockShipment, ModelProvider, Operator, RiskRule, Tenant, User,
 )
 
 now = datetime.now(timezone.utc)
 
-OPERATORS = [
-    {"username": "admin", "display_name": "管理员", "role": "admin", "password": "admin123"},
+DEMO_WIDGET_KEY = "pk_demo000000000000"
+DEMO_API_SECRET = "sk_demo000000000000"
+
+# 平台级账号（tenant_id=NULL，跨租户视野）
+PLATFORM_OPERATORS = [
+    {"username": "admin", "display_name": "平台管理员", "role": "admin", "password": "admin123"},
+]
+
+# 演示商城租户内账号（商户视角）
+TENANT_OPERATORS = [
+    {"username": "shop", "display_name": "演示商城店长", "role": "owner", "password": "shop123"},
     {"username": "approver", "display_name": "审批员A", "role": "operator", "password": "op123456"},
 ]
 
@@ -55,7 +70,7 @@ PRODUCTS = [
     {"sku": "P-006", "name": "儿童积木桶", "price": 89, "category": "玩具"},
 ]
 
-# 用户：external_id 唯一；演示主用户是"顾客演示"
+# 用户：租户内 external_id 唯一；演示主用户是"顾客演示"
 USERS = [
     {"external_id": "demo", "nickname": "顾客演示", "user_tier": "normal", "risk_flags": {}, "total_refund_30d": 0},
     {"external_id": "wool", "nickname": "羊毛小王", "user_tier": "normal",
@@ -125,41 +140,72 @@ EVAL_CASES = [
 def seed():
     db = SessionLocal()
     try:
-        # 1. 运营账号
-        for op in OPERATORS:
+        # 0. 演示商城租户（幂等：按 widget_key 定位；迁移已建则复用）
+        tenant = db.scalar(select(Tenant).where(Tenant.widget_key == DEMO_WIDGET_KEY))
+        if tenant is None:
+            tenant = Tenant(
+                name="演示商城", widget_key=DEMO_WIDGET_KEY, api_secret=DEMO_API_SECRET,
+                brand={"title": "演示商城智能客服",
+                       "welcome": "您好～我是演示商城的智能客服，请问有什么可以帮您？",
+                       "theme_color": "#4F46E5"},
+                allowed_origins=[],
+            )
+            db.add(tenant)
+            db.flush()
+
+        # 1. 平台账号（tenant_id=NULL）+ 租户内账号
+        for op in PLATFORM_OPERATORS:
             if db.scalar(select(Operator).where(Operator.username == op["username"])) is None:
-                db.add(Operator(username=op["username"], display_name=op["display_name"],
+                db.add(Operator(tenant_id=None, username=op["username"],
+                                display_name=op["display_name"],
                                 role=op["role"], password_hash=hash_password(op["password"])))
-        # 2. 风险规则
+        for op in TENANT_OPERATORS:
+            row = db.scalar(select(Operator).where(Operator.username == op["username"]))
+            if row is None:
+                db.add(Operator(tenant_id=tenant.id, username=op["username"],
+                                display_name=op["display_name"],
+                                role=op["role"], password_hash=hash_password(op["password"])))
+            elif row.tenant_id is None:
+                # 迁移前的存量账号归位到演示租户（如 approver）
+                row.tenant_id = tenant.id
+        # 2. 风险规则（租户内）
         for r in RISK_RULES:
-            if db.scalar(select(RiskRule).where(RiskRule.rule_key == r["rule_key"])) is None:
-                db.add(RiskRule(**r))
-        # 3. 升级规则
+            if db.scalar(select(RiskRule).where(
+                    RiskRule.tenant_id == tenant.id, RiskRule.rule_key == r["rule_key"])) is None:
+                db.add(RiskRule(tenant_id=tenant.id, **r))
+        # 3. 升级规则（租户内）
         for r in ESCALATION_RULES:
-            if db.scalar(select(EscalationRule).where(EscalationRule.name == r["name"])) is None:
-                db.add(EscalationRule(**r))
-        # 4. 商品
+            if db.scalar(select(EscalationRule).where(
+                    EscalationRule.tenant_id == tenant.id,
+                    EscalationRule.name == r["name"])) is None:
+                db.add(EscalationRule(tenant_id=tenant.id, **r))
+        # 4. 商品（租户内）
         for p in PRODUCTS:
-            if db.scalar(select(MockProduct).where(MockProduct.sku == p["sku"])) is None:
-                db.add(MockProduct(**p))
+            if db.scalar(select(MockProduct).where(
+                    MockProduct.tenant_id == tenant.id, MockProduct.sku == p["sku"])) is None:
+                db.add(MockProduct(tenant_id=tenant.id, **p))
         db.flush()
 
-        # 5. 用户
+        # 5. 用户（租户内）
         user_ids = {}
         for u in USERS:
-            row = db.scalar(select(User).where(User.external_id == u["external_id"]))
+            row = db.scalar(select(User).where(
+                User.tenant_id == tenant.id, User.external_id == u["external_id"]))
             if row is None:
-                row = User(**u)
+                row = User(tenant_id=tenant.id, **u)
                 db.add(row)
                 db.flush()
             user_ids[u["external_id"]] = row.id
 
-        # 6. 订单 + 物流
-        sku2id = {p.sku: p.id for p in db.scalars(select(MockProduct)).all()}
+        # 6. 订单 + 物流（租户内）
+        sku2id = {p.sku: p.id for p in db.scalars(
+            select(MockProduct).where(MockProduct.tenant_id == tenant.id)).all()}
         for ext, sku, order_no, status, paid_off, ship_status, eta_off in ORDERS:
-            if db.scalar(select(MockOrder).where(MockOrder.order_no == order_no)):
+            if db.scalar(select(MockOrder).where(
+                    MockOrder.tenant_id == tenant.id, MockOrder.order_no == order_no)):
                 continue
             order = MockOrder(
+                tenant_id=tenant.id,
                 order_no=order_no, user_id=user_ids[ext], product_id=sku2id[sku],
                 amount=next(p["price"] for p in PRODUCTS if p["sku"] == sku),
                 status=status, address_masked="北京市朝阳区***路**号",
@@ -168,15 +214,16 @@ def seed():
             db.add(order)
             db.flush()
             if ship_status:
-                db.add(MockShipment(order_id=order.id, carrier="顺丰速运",
+                db.add(MockShipment(tenant_id=tenant.id, order_id=order.id, carrier="顺丰速运",
                                     tracking_no=f"SF{order_no.replace('-', '')}88",
                                     status=ship_status,
                                     estimated_delivery=(now + timedelta(days=eta_off)).date()))
 
-        # 7. 知识库文档（版本 1，立即生效）
+        # 7. 知识库文档（版本 1，立即生效；租户内）
         for doc in KB_DOCS:
-            if db.scalar(select(KbDocument).where(KbDocument.code == doc["code"])) is None:
-                row = KbDocument(code=doc["code"], title=doc["title"],
+            if db.scalar(select(KbDocument).where(
+                    KbDocument.tenant_id == tenant.id, KbDocument.code == doc["code"])) is None:
+                row = KbDocument(tenant_id=tenant.id, code=doc["code"], title=doc["title"],
                                  category=doc["category"], status="published",
                                  created_by="seed")
                 db.add(row)
@@ -188,12 +235,14 @@ def seed():
                 db.flush()
                 row.current_version_id = ver.id
 
-        # 8. 模型供应商
+        # 8. 模型供应商（租户内；未配置租户走 .env 默认）
         for p in PROVIDERS:
-            if db.scalar(select(ModelProvider).where(ModelProvider.name == p["name"])) is None:
-                db.add(ModelProvider(**p))
+            if db.scalar(select(ModelProvider).where(
+                    ModelProvider.tenant_id == tenant.id,
+                    ModelProvider.name == p["name"])) is None:
+                db.add(ModelProvider(tenant_id=tenant.id, **p))
 
-        # 9. Eval 黄金集
+        # 9. Eval 黄金集（平台级，跑在演示租户上）
         for i, case in enumerate(EVAL_CASES):
             if db.scalar(select(EvalCase).where(EvalCase.name == case["name"])) is None:
                 db.add(EvalCase(id=i + 1, **case))
@@ -201,6 +250,7 @@ def seed():
 
         # 汇总
         counts = {
+            "tenants": len(db.scalars(select(Tenant)).all()),
             "operators": len(db.scalars(select(Operator)).all()),
             "risk_rules": len(db.scalars(select(RiskRule)).all()),
             "escalation_rules": len(db.scalars(select(EscalationRule)).all()),
@@ -209,8 +259,8 @@ def seed():
             "orders": len(db.scalars(select(MockOrder)).all()),
         }
         print("种子完成：", counts)
-        demo = db.scalar(select(User).where(User.external_id == "demo"))
-        print(f"演示用户 id: {demo.id}")
+        print(f"演示租户 id: {tenant.id}")
+        print(f"Widget 密钥: {DEMO_WIDGET_KEY} / API 密钥: {DEMO_API_SECRET}")
     finally:
         db.close()
 

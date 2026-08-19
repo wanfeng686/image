@@ -15,8 +15,18 @@ from app.models import (
 )
 from app.services import escalation as escalation_svc
 from app.services.demo import reset_demo
+from app.models import Tenant
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+DEMO_WIDGET_KEY = "pk_demo000000000000"   # 与迁移/seed 共用的演示租户标识
+
+
+def _demo_tenant(db: Session) -> Tenant:
+    t = db.scalar(select(Tenant).where(Tenant.widget_key == DEMO_WIDGET_KEY))
+    if t is None:
+        raise HTTPException(500, "演示租户未初始化，请先跑 scripts/seed.py")
+    return t
 
 
 def _require_admin(op: Operator = Depends(get_current_operator)) -> Operator:
@@ -30,14 +40,19 @@ class EvalRunRequest(BaseModel):
 
 
 def _run_case(db: Session, case: EvalCase) -> EvalRun:
-    """单用例：全新会话逐条消息跑全链路（升级前置 + 状态机），按期望打分。"""
+    """单用例：全新会话逐条消息跑全链路（升级前置 + 状态机），按期望打分。
+    Eval 固定跑在演示商城租户上（黄金集引用其订单/知识库）。"""
+    tenant = _demo_tenant(db)
     script = case.user_script
-    user = db.scalar(select(User).where(User.external_id == script.get("user_external_id", "eval")))
+    user = db.scalar(select(User).where(
+        User.tenant_id == tenant.id,
+        User.external_id == script.get("user_external_id", "eval")))
     if user is None:
-        user = User(external_id=script.get("user_external_id", "eval"), nickname="Eval用户")
+        user = User(tenant_id=tenant.id,
+                    external_id=script.get("user_external_id", "eval"), nickname="Eval用户")
         db.add(user)
         db.flush()
-    session = ChatSession(user_id=user.id, config_snapshot={})
+    session = ChatSession(tenant_id=tenant.id, user_id=user.id, config_snapshot={})
     db.add(session)
     db.flush()
 

@@ -26,9 +26,11 @@ def _repeat_tracking(session, question: str) -> tuple[bool, str | None]:
 
 
 def evaluate(db: Session, session, user: User, question: str) -> tuple[bool, str | None]:
-    """返回 (是否升级, 原因)。规则按 priority 升序评估，命中即返回。"""
+    """返回 (是否升级, 原因)。规则按 priority 升序评估，命中即返回（租户隔离）。"""
     rules = db.scalars(
-        select(EscalationRule).where(EscalationRule.enabled).order_by(EscalationRule.priority)
+        select(EscalationRule)
+        .where(EscalationRule.enabled, EscalationRule.tenant_id == session.tenant_id)
+        .order_by(EscalationRule.priority)
     ).all()
 
     # 追问计数独立于表规则（条件型规则可读它的配置，这里统一实现）

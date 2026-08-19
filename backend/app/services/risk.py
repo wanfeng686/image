@@ -1,8 +1,9 @@
 """风险评分服务：多维打分 + 分级路由。
 
 铁律（DESIGN §4.2 处置 Agent）：评分与阈值比较在编排层代码里做，不信任 LLM 自评。
-阈值全部来自 risk_rules 表，运营台可改。
+阈值全部来自 risk_rules 表（租户独立配置），运营台可改。
 """
+import uuid
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -11,8 +12,9 @@ from sqlalchemy.orm import Session
 from app.models import MockOrder, RiskRule, User
 
 
-def load_rules(db: Session) -> dict:
-    return {r.rule_key: r.value for r in db.scalars(select(RiskRule))}
+def load_rules(db: Session, tenant_id: uuid.UUID) -> dict:
+    return {r.rule_key: r.value for r in db.scalars(
+        select(RiskRule).where(RiskRule.tenant_id == tenant_id))}
 
 
 def score_refund(db: Session, user: User, order: MockOrder,
@@ -23,7 +25,7 @@ def score_refund(db: Session, user: User, order: MockOrder,
     分级：low→自动执行 / medium→1 人审批 / high→双签（2 人）。
     拆单旁路防御（S2）：聚合投影超限直接 high。
     """
-    rules = load_rules(db)
+    rules = load_rules(db, user.tenant_id)
     auto_limit = float(rules.get("auto_approve_limit", {}).get("amount", 50))
     queue_limit = float(rules.get("queue_approve_limit", {}).get("amount", 500))
     agg_limit = float(rules.get("aggregate_30d_limit", {}).get("amount", 600))

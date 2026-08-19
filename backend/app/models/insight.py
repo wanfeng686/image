@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,11 +9,13 @@ from app.core.db import Base
 
 
 class InsightReport(Base):
-    """洞察日报：每日统计 + LLM 生成的发现与建议。"""
+    """洞察日报：每日统计 + LLM 生成的发现与建议（租户隔离）。"""
     __tablename__ = "insight_reports"
+    __table_args__ = (UniqueConstraint("tenant_id", "report_date", name="uq_insights_tenant_date"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    report_date: Mapped[date] = mapped_column(Date, unique=True, nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="generating")  # generating|generated|failed
     summary: Mapped[str | None] = mapped_column(Text)
     metrics: Mapped[dict | None] = mapped_column(JSONB)

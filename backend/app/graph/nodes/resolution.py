@@ -44,7 +44,7 @@ def resolution_node(state: dict) -> dict:
         score, breakdown, level, required = risk_svc.score_refund(
             db, user, order, state.get("sentiment"),
         )
-        timeout_hours = float(risk_svc.load_rules(db)
+        timeout_hours = float(risk_svc.load_rules(db, session.tenant_id)
                               .get("approval_timeout_hours", {}).get("hours", 4))
 
         if level == "low":

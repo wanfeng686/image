@@ -43,11 +43,13 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     db.commit()
     return {
         "token": issue_token(str(op.id)),
-        "operator": {"id": str(op.id), "display_name": op.display_name, "role": op.role},
+        "operator": {"id": str(op.id), "display_name": op.display_name, "role": op.role,
+                     "tenant_id": str(op.tenant_id) if op.tenant_id else None},
     }
 
 
 @router.get("/me")
 def me(op: Operator = Depends(get_current_operator)):
     return {"id": str(op.id), "display_name": op.display_name,
-            "role": op.role, "is_online": op.is_online}
+            "role": op.role, "is_online": op.is_online,
+            "tenant_id": str(op.tenant_id) if op.tenant_id else None}

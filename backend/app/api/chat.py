@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -19,7 +19,7 @@ from app.models import ChatSession, Message, User
 from app.schemas.message import MessageOut, MessagePage
 from app.schemas.session import SessionOut
 from app.services import escalation as escalation_svc
-from app.services import kb, llm
+from app.services import kb, llm, tenants as tenant_svc
 from app.services.runs import Timer, log_run
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -68,24 +68,30 @@ def _base_state(db, session, question: str, history: list[dict], message_id) -> 
 
 
 @router.post("/sessions", response_model=SessionOut, status_code=201)
-def create_session(body: CreateSessionRequest, db: Session = Depends(get_db)):
+def create_session(body: CreateSessionRequest, db: Session = Depends(get_db),
+                   x_widget_key: str | None = Header(default=None)):
+    """SaaS 化：会话必须归属某个租户，凭 X-Widget-Key 定位（与 /api/widget/sessions 同一套鉴权）。
+    user_external_id 在租户内绑定/创建（跨租户永不串号）。"""
+    tenant = tenant_svc.require_tenant_by_widget_key(db, x_widget_key)
     if body.user_id:
-        user = db.get(User, body.user_id)
+        user = db.scalar(select(User).where(
+            User.id == body.user_id, User.tenant_id == tenant.id))
         if user is None:
             raise HTTPException(status_code=404, detail="user not found")
     elif body.user_external_id:
-        user = db.scalar(select(User).where(User.external_id == body.user_external_id))
+        user = db.scalar(select(User).where(
+            User.tenant_id == tenant.id, User.external_id == body.user_external_id))
         if user is None:
-            user = User(external_id=body.user_external_id,
+            user = User(tenant_id=tenant.id, external_id=body.user_external_id,
                         nickname=f"顾客{uuid.uuid4().hex[:6]}")
             db.add(user)
             db.flush()
     else:
-        user = User(nickname=f"顾客{uuid.uuid4().hex[:6]}")
+        user = User(tenant_id=tenant.id, nickname=f"顾客{uuid.uuid4().hex[:6]}")
         db.add(user)
         db.flush()
 
-    session = ChatSession(user_id=user.id, config_snapshot={})
+    session = ChatSession(tenant_id=tenant.id, user_id=user.id, config_snapshot={})
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -255,12 +261,12 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
             yield sse_event("agent_status", {"agent": "knowledge", "status": "working"})
             answer = None
             with Timer() as t:
-                chunks = kb.retrieve(db, body.content)
+                chunks = kb.retrieve(db, session.tenant_id, body.content)
                 if chunks:
                     pieces = []
                     try:
                         for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks),
-                                                      agent="knowledge"):
+                                                      agent="knowledge", tenant_id=session.tenant_id):
                             pieces.append(token)
                             yield sse_event("message_delta", {"message_id": str(agent_id), "delta": token})
                         answer = "".join(pieces)

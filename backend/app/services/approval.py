@@ -33,7 +33,7 @@ def request_refund_approval(
     if existing is not None:
         return existing, False
 
-    rules = load_rules(db)
+    rules = load_rules(db, session.tenant_id)
     timeout_hours = float(rules.get("approval_timeout_hours", {}).get("hours", 4))
     prev_status = order.status  # 记住驳回/超时要回滚的状态
 

@@ -13,9 +13,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select  # noqa: E402
 
 from app.core.db import SessionLocal  # noqa: E402
-from app.models import AgentRun, ApprovalRequest, ExecutedAction, MockOrder, User  # noqa: E402
+from app.models import AgentRun, ApprovalRequest, ExecutedAction, MockOrder, Tenant, User  # noqa: E402
 
 BASE = "http://127.0.0.1:8000"
+WIDGET_KEY = "pk_demo000000000000"   # 演示商城租户
 PASS, FAIL = 0, 0
 
 
@@ -26,13 +27,20 @@ def check(name: str, cond: bool, detail: str = ""):
     PASS, FAIL = PASS + (1 if cond else 0), FAIL + (1 if not cond else 0)
 
 
+def tenant_id() -> str:
+    with SessionLocal() as db:
+        return str(db.scalar(select(Tenant).where(Tenant.widget_key == WIDGET_KEY)).id)
+
+
 def uid(ext: str) -> str:
     with SessionLocal() as db:
-        return str(db.scalar(select(User).where(User.external_id == ext)).id)
+        return str(db.scalar(select(User).where(
+            User.external_id == ext, User.tenant_id == tenant_id())).id)
 
 
 def new_session(client: httpx.Client, user_id: str) -> str:
-    r = client.post(f"{BASE}/api/chat/sessions", json={"user_id": user_id})
+    r = client.post(f"{BASE}/api/chat/sessions", json={"user_id": user_id},
+                    headers={"X-Widget-Key": WIDGET_KEY})
     r.raise_for_status()
     return r.json()["id"]
 
@@ -45,7 +53,9 @@ def ask(client: httpx.Client, sid: str, q: str) -> dict:
 
 def order_status(order_no: str) -> str:
     with SessionLocal() as db:
-        return db.scalar(select(MockOrder).where(MockOrder.order_no == order_no)).status
+        return db.scalar(select(MockOrder).where(
+            MockOrder.order_no == order_no,
+            MockOrder.tenant_id == tenant_id())).status
 
 
 def main():
@@ -79,7 +89,8 @@ def main():
           str(card))
     check("小额退款：订单状态 refunded", order_status("SO-0001") == "refunded")
     with SessionLocal() as db:
-        u = db.scalar(select(User).where(User.external_id == "demo"))
+        u = db.scalar(select(User).where(User.external_id == "demo",
+                                         User.tenant_id == tenant_id()))
         check("小额退款：30 天累计 +49", float(u.total_refund_30d) == 49.0, str(u.total_refund_30d))
 
     # 中额 299（耳机）→ 1 人审批

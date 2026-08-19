@@ -2,8 +2,10 @@
 
 检索铁律（DESIGN C1）：只命中 published 文档的 active 版本，且生效窗口覆盖今天
 ——过期旧政策永远进不了上下文，QC 共享盲区从源头收窄。
-接口签名保持 (db, query, top_k)，未来接 Qdrant 时只换实现。
+SaaS 化：租户隔离，各商户只检索自己的知识库。
+接口签名保持 (db, tenant_id, query, top_k)，未来接 Qdrant 时只换实现。
 """
+import uuid
 from datetime import date
 
 from sqlalchemy import or_, select
@@ -12,12 +14,13 @@ from sqlalchemy.orm import Session
 from app.models import KbDocument, KbDocumentVersion
 
 
-def _effective_docs(db: Session) -> list[tuple[KbDocument, KbDocumentVersion]]:
+def _effective_docs(db: Session, tenant_id: uuid.UUID) -> list[tuple[KbDocument, KbDocumentVersion]]:
     today = date.today()
     return db.execute(
         select(KbDocument, KbDocumentVersion)
         .join(KbDocumentVersion, KbDocument.current_version_id == KbDocumentVersion.id)
         .where(
+            KbDocument.tenant_id == tenant_id,
             KbDocument.status == "published",
             KbDocumentVersion.status == "active",
             KbDocumentVersion.effective_from <= today,
@@ -27,11 +30,11 @@ def _effective_docs(db: Session) -> list[tuple[KbDocument, KbDocumentVersion]]:
     ).all()
 
 
-def retrieve(db: Session, query: str, top_k: int = 3) -> list[dict]:
+def retrieve(db: Session, tenant_id: uuid.UUID, query: str, top_k: int = 3) -> list[dict]:
     """关键词打分检索（W4 仍是词法版；向量版是 Qdrant 接入后的事）。"""
     q = query or ""
     scored = []
-    for doc, ver in _effective_docs(db):
+    for doc, ver in _effective_docs(db, tenant_id):
         text = f"{doc.title} {ver.content}"
         score = sum(1 for kw in _keywords(text) if kw and kw in q)
         if score > 0:

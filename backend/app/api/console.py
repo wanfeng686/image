@@ -2,6 +2,9 @@
 
 响应按 API.md 契约手工组装 dict（复合查询多，Pydantic 出口模板收益低）。
 鉴权：全部走 get_current_operator（Bearer token）。
+SaaS 化：租户隔离——商户操作员只看自己租户的数据；平台管理员
+（tenant_id=NULL）豁免过滤可看全部。越权访问其他租户资源一律 404
+（与"不存在"同响应，不泄露资源存在性）。
 """
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -25,6 +28,21 @@ router = APIRouter(prefix="/api/console", tags=["console"],
 
 def _now():
     return datetime.now(timezone.utc)
+
+
+def _tfilter(op: Operator, model):
+    """租户过滤条件：平台管理员（tenant_id=NULL）返回 None = 不过滤。"""
+    return None if op.tenant_id is None else model.tenant_id == op.tenant_id
+
+
+def _session_tfilter(op: Operator):
+    """经 sessions 表关联的表的租户过滤（approvals / agent_runs 等）。"""
+    return None if op.tenant_id is None else ChatSession.tenant_id == op.tenant_id
+
+
+def _check_session_scope(op: Operator, s: ChatSession) -> None:
+    if op.tenant_id is not None and s.tenant_id != op.tenant_id:
+        raise HTTPException(404, "session not found")
 
 
 def _expire_timeouts(db: Session) -> int:
@@ -63,26 +81,33 @@ def _approval_dict(req: ApprovalRequest, db: Session) -> dict:
 # ─────────────────────────── P2 概览 ───────────────────────────
 
 @router.get("/dashboard/overview")
-def dashboard_overview(range: str = "today", db: Session = Depends(get_db)):
+def dashboard_overview(range: str = "today", db: Session = Depends(get_db),
+                       op: Operator = Depends(get_current_operator)):
     _expire_timeouts(db)
     since = {"today": timedelta(days=1), "7d": timedelta(days=7), "30d": timedelta(days=30)}[range]
     cutoff = _now() - since
+    tf = _tfilter(op, ChatSession)
 
     total = db.scalar(select(func.count()).select_from(ChatSession)
-                      .where(ChatSession.created_at >= cutoff))
+                      .where(tf, ChatSession.created_at >= cutoff))
     escalated = db.scalar(select(func.count()).select_from(ChatSession)
-                          .where(ChatSession.created_at >= cutoff, ChatSession.status == "escalated"))
+                          .where(tf, ChatSession.created_at >= cutoff,
+                                 ChatSession.status == "escalated"))
     pending = db.scalar(select(func.count()).select_from(ApprovalRequest)
-                        .where(ApprovalRequest.status == "pending"))
-    llm_calls = db.scalar(select(func.count()).select_from(AgentRun)
-                          .where(AgentRun.created_at >= cutoff, AgentRun.provider_name.isnot(None)))
+                        .join(ChatSession, ApprovalRequest.session_id == ChatSession.id)
+                        .where(_session_tfilter(op), ApprovalRequest.status == "pending"))
+    llm_calls = db.scalar(
+        select(func.count()).select_from(AgentRun)
+        .join(ChatSession, AgentRun.session_id == ChatSession.id)
+        .where(_session_tfilter(op),
+               AgentRun.created_at >= cutoff, AgentRun.provider_name.isnot(None)))
 
     # 趋势：近 7 天每日会话量（注意：参数名 range 遮蔽了内置 range，这里用元组字面量）
     trend = []
     for i in (6, 5, 4, 3, 2, 1, 0):
         day = (_now() - timedelta(days=i)).date()
         n = db.scalar(select(func.count()).select_from(ChatSession)
-                      .where(func.date(ChatSession.created_at) == day))
+                      .where(tf, func.date(ChatSession.created_at) == day))
         trend.append({"date": str(day), "sessions": n})
 
     # 意图分布（triage 快照聚合；行数小，Python 侧聚合最稳）
@@ -90,14 +115,17 @@ def dashboard_overview(range: str = "today", db: Session = Depends(get_db)):
 
     counter = Counter()
     for li in db.scalars(select(ChatSession.last_intent)
-                         .where(ChatSession.last_intent.isnot(None))).all():
+                         .where(tf, ChatSession.last_intent.isnot(None))).all():
         intents_list = (li or {}).get("intents") or ["unknown"]
         counter[intents_list[0]] += 1
     intents = [{"intent": k, "count": v} for k, v in counter.items()]
 
     # Agent 调用统计
-    agent_rows = db.execute(select(AgentRun.agent_name, func.count())
-                            .group_by(AgentRun.agent_name)).all()
+    agent_rows = db.execute(
+        select(AgentRun.agent_name, func.count())
+        .join(ChatSession, AgentRun.session_id == ChatSession.id)
+        .where(_session_tfilter(op))
+        .group_by(AgentRun.agent_name)).all()
 
     return {
         "kpis": {
@@ -118,8 +146,11 @@ def dashboard_overview(range: str = "today", db: Session = Depends(get_db)):
 
 @router.get("/sessions")
 def list_sessions(status: str | None = None, q: str | None = None,
-                  page: int = 1, page_size: int = 20, db: Session = Depends(get_db)):
+                  page: int = 1, page_size: int = 20, db: Session = Depends(get_db),
+                  op: Operator = Depends(get_current_operator)):
     query = select(ChatSession).order_by(ChatSession.last_message_at.desc().nullslast())
+    if (tf := _tfilter(op, ChatSession)) is not None:
+        query = query.where(tf)
     if status:
         query = query.where(ChatSession.status == status)
     if q:
@@ -149,10 +180,12 @@ def list_sessions(status: str | None = None, q: str | None = None,
 
 
 @router.get("/sessions/{session_id}")
-def session_detail(session_id: uuid.UUID, db: Session = Depends(get_db)):
+def session_detail(session_id: uuid.UUID, db: Session = Depends(get_db),
+                   op: Operator = Depends(get_current_operator)):
     s = db.get(ChatSession, session_id)
     if s is None:
         raise HTTPException(404, "session not found")
+    _check_session_scope(op, s)
     messages = db.scalars(select(Message).where(Message.session_id == session_id)
                           .order_by(Message.created_at)).all()
     runs = db.scalars(select(AgentRun).where(AgentRun.session_id == session_id)
@@ -161,7 +194,9 @@ def session_detail(session_id: uuid.UUID, db: Session = Depends(get_db)):
         ApprovalRequest.session_id == session_id, ApprovalRequest.status == "pending")).all()
     notes = db.scalars(select(SessionNote).where(SessionNote.session_id == session_id)
                        .order_by(SessionNote.created_at)).all()
-    op_names = {str(o.id): o.display_name for o in db.scalars(select(Operator))}
+    op_names = {str(o.id): o.display_name for o in db.scalars(
+        select(Operator).where((Operator.tenant_id == s.tenant_id)
+                               | Operator.tenant_id.is_(None)))}
     return {
         "session": {"id": str(s.id), "status": s.status,
                     "rolling_summary": s.rolling_summary, "slots": s.slots,
@@ -192,6 +227,7 @@ def takeover(session_id: uuid.UUID, db: Session = Depends(get_db),
     s = db.get(ChatSession, session_id)
     if s is None:
         raise HTTPException(404, "session not found")
+    _check_session_scope(op, s)
     s.status = "escalated"
     s.escalated_reason = "takeover"
     s.taken_over_by = op.id
@@ -210,6 +246,7 @@ def add_note(session_id: uuid.UUID, body: NoteRequest, db: Session = Depends(get
     s = db.get(ChatSession, session_id)
     if s is None:
         raise HTTPException(404, "session not found")
+    _check_session_scope(op, s)
     note = SessionNote(session_id=session_id, operator_id=op.id, content=body.content)
     db.add(note)
     db.commit()
@@ -219,12 +256,13 @@ def add_note(session_id: uuid.UUID, body: NoteRequest, db: Session = Depends(get
 
 
 @router.get("/sessions/{session_id}/export")
-def export_trace(session_id: uuid.UUID, db: Session = Depends(get_db)):
+def export_trace(session_id: uuid.UUID, db: Session = Depends(get_db),
+                 op: Operator = Depends(get_current_operator)):
     import json as _json
 
     from fastapi.encoders import jsonable_encoder
 
-    detail = session_detail(session_id, db)
+    detail = session_detail(session_id, db, op)
     return Response(
         content=_json.dumps(jsonable_encoder(detail), ensure_ascii=False, default=str),
         media_type="application/json",
@@ -234,11 +272,26 @@ def export_trace(session_id: uuid.UUID, db: Session = Depends(get_db)):
 
 # ─────────────────────────── P4 审批 ───────────────────────────
 
+def _get_scoped_approval(db: Session, op: Operator, approval_id: uuid.UUID) -> ApprovalRequest:
+    req = db.get(ApprovalRequest, approval_id)
+    if req is None:
+        raise HTTPException(404, "approval not found")
+    if op.tenant_id is not None:
+        sess = db.get(ChatSession, req.session_id)
+        if sess is None or sess.tenant_id != op.tenant_id:
+            raise HTTPException(404, "approval not found")
+    return req
+
+
 @router.get("/approvals")
 def list_approvals(status: str = "pending", page: int = 1, page_size: int = 20,
-                   db: Session = Depends(get_db)):
+                   db: Session = Depends(get_db), op: Operator = Depends(get_current_operator)):
     _expire_timeouts(db)
-    query = select(ApprovalRequest).order_by(ApprovalRequest.created_at.desc())
+    query = select(ApprovalRequest).join(
+        ChatSession, ApprovalRequest.session_id == ChatSession.id)
+    if (tf := _session_tfilter(op)) is not None:
+        query = query.where(tf)
+    query = query.order_by(ApprovalRequest.created_at.desc())
     if status != "all":
         query = query.where(ApprovalRequest.status == status)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
@@ -248,10 +301,9 @@ def list_approvals(status: str = "pending", page: int = 1, page_size: int = 20,
 
 
 @router.get("/approvals/{approval_id}")
-def approval_detail(approval_id: uuid.UUID, db: Session = Depends(get_db)):
-    req = db.get(ApprovalRequest, approval_id)
-    if req is None:
-        raise HTTPException(404, "approval not found")
+def approval_detail(approval_id: uuid.UUID, db: Session = Depends(get_db),
+                    op: Operator = Depends(get_current_operator)):
+    req = _get_scoped_approval(db, op, approval_id)
     data = _approval_dict(req, db)
     msgs = db.scalars(select(Message).where(Message.session_id == req.session_id)
                       .order_by(Message.created_at).limit(10)).all()
@@ -276,9 +328,10 @@ def _do_approve(db: Session, req: ApprovalRequest, op: Operator, note: str | Non
     if req.granted_approvals >= req.required_approvals:
         req.status = "approved"
         # 真正执行资金动作（幂等：executed_actions 拦重放）
-        order = db.scalar(select(MockOrder).where(
-            MockOrder.order_no == req.action_payload.get("order_no")))
         session = db.get(ChatSession, req.session_id)
+        order = db.scalar(select(MockOrder).where(
+            MockOrder.order_no == req.action_payload.get("order_no"),
+            MockOrder.tenant_id == session.tenant_id))
         user = db.get(User, session.user_id)
         executed, _ = approval_svc.execute_refund(
             db, req.session_id, order, user, approval_request=req,
@@ -304,9 +357,7 @@ class ActionRequest(BaseModel):
 @router.post("/approvals/{approval_id}/approve")
 def approve(approval_id: uuid.UUID, body: ActionRequest | None = None,
             db: Session = Depends(get_db), op: Operator = Depends(get_current_operator)):
-    req = db.get(ApprovalRequest, approval_id)
-    if req is None:
-        raise HTTPException(404, "approval not found")
+    req = _get_scoped_approval(db, op, approval_id)
     return _do_approve(db, req, op, (body.note if body else None))
 
 
@@ -315,9 +366,7 @@ def reject(approval_id: uuid.UUID, body: ActionRequest,
            db: Session = Depends(get_db), op: Operator = Depends(get_current_operator)):
     if not body.note:
         raise HTTPException(422, "拒绝必须填写理由")
-    req = db.get(ApprovalRequest, approval_id)
-    if req is None:
-        raise HTTPException(404, "approval not found")
+    req = _get_scoped_approval(db, op, approval_id)
     if req.status != "pending":
         raise HTTPException(409, {"code": "ALREADY_RESOLVED", "message": f"该审批已是 {req.status}"})
     db.add(ApprovalAction(approval_request_id=req.id, operator_id=op.id,
@@ -335,9 +384,7 @@ def reject(approval_id: uuid.UUID, body: ActionRequest,
 @router.post("/approvals/{approval_id}/return")
 def returned(approval_id: uuid.UUID, body: ActionRequest,
              db: Session = Depends(get_db), op: Operator = Depends(get_current_operator)):
-    req = db.get(ApprovalRequest, approval_id)
-    if req is None:
-        raise HTTPException(404, "approval not found")
+    req = _get_scoped_approval(db, op, approval_id)
     if req.status != "pending":
         raise HTTPException(409, {"code": "ALREADY_RESOLVED", "message": f"该审批已是 {req.status}"})
     db.add(ApprovalAction(approval_request_id=req.id, operator_id=op.id,
@@ -355,10 +402,15 @@ def returned(approval_id: uuid.UUID, body: ActionRequest,
 @router.post("/approvals/{approval_id}/remind")
 def remind(approval_id: uuid.UUID, db: Session = Depends(get_db),
            op: Operator = Depends(get_current_operator)):
-    req = db.get(ApprovalRequest, approval_id)
-    if req is None:
-        raise HTTPException(404, "approval not found")
-    target = db.scalar(select(Operator).where(Operator.role == "admin"))
+    req = _get_scoped_approval(db, op, approval_id)
+    # 催办目标：优先同租户管理员，回退平台管理员
+    target = db.scalar(select(Operator).where(
+        Operator.role == "admin", Operator.tenant_id == op.tenant_id))
+    if target is None:
+        target = db.scalar(select(Operator).where(
+            Operator.role == "admin", Operator.tenant_id.is_(None)))
+    if target is None:
+        target = op
     db.add(ApprovalAction(approval_request_id=req.id, operator_id=op.id, action="remind"))
     db.commit()
     return {"ok": True, "reminded_operator": {"id": str(target.id), "display_name": target.display_name}}
@@ -374,10 +426,8 @@ def batch_approve(body: BatchRequest, db: Session = Depends(get_db),
                   op: Operator = Depends(get_current_operator)):
     succeeded, failed = [], []
     for aid in body.ids:
-        req = db.get(ApprovalRequest, aid)
         try:
-            if req is None:
-                raise HTTPException(404, "approval not found")
+            req = _get_scoped_approval(db, op, aid)
             _do_approve(db, req, op, body.note)
             succeeded.append(str(aid))
         except HTTPException:

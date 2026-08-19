@@ -161,9 +161,12 @@ function addBanner(text) {
 }
 
 // 页面加载即开一个新会话。演示模式：绑定种子数据里的"顾客演示"（有订单可查可退）
+// SaaS 化：会话创建必须带租户 Widget 密钥（演示商城）
+const WIDGET_KEY = "pk_demo000000000000";
+
 async function init() {
   const resp = await fetch(API + "/sessions", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", "X-Widget-Key": WIDGET_KEY },
     body: JSON.stringify({ user_external_id: "demo" }),
   });
   const session = await resp.json();
