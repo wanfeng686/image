@@ -1,22 +1,33 @@
-"""商户门户 API：注册 / 租户信息 / 品牌设置 / 域名白名单 / 密钥轮换 / 数据导入。
+"""商户门户 API：邮箱注册（验证码）/ 租户信息 / 品牌设置 / 域名白名单 / 密钥轮换 / 数据导入。
 
 注册即得：租户 + owner 操作员 + 默认风控/升级规则 + 双密钥（pk_/sk_）。
-登录复用 /api/auth/login（username 全局唯一）。
-注意：/register 公开，其余接口要求商户操作员上下文。
+登录复用 /api/auth/login（邮箱或用户名均可定位账号）。
+注意：/register 与 /email/send-code 公开，其余接口要求商户操作员上下文。
 """
+import hashlib
+import re
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_operator
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_password, issue_token
-from app.models import ChatSession, MockOrder, MockProduct, Operator, Tenant, User
-from app.services import tenants as tenant_svc
+from app.models import ChatSession, EmailCode, MockOrder, MockProduct, Operator, Tenant, User
+from app.services import mailer, tenants as tenant_svc
 from app.services.defaults import ensure_default_rules
 
 router = APIRouter(prefix="/api/portal", tags=["portal"])
+
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+CODE_TTL_MIN = 10
+CODE_RESEND_COOLDOWN = 60      # 同一邮箱 60s 内只能发一次
+CODE_MAX_ATTEMPTS = 5
 
 
 def _get_tenant(db: Session, op: Operator) -> Tenant:
@@ -25,11 +36,130 @@ def _get_tenant(db: Session, op: Operator) -> Tenant:
     return db.get(Tenant, op.tenant_id)
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _hash_code(email: str, code: str) -> str:
+    secret = settings.secret_key or settings.llm_api_key or "ss-dev"
+    return hashlib.sha256(f"{email}:{code}:{secret}".encode()).hexdigest()
+
+
+class SendCodeRequest(BaseModel):
+    email: str
+
+
+@router.post("/email/send-code")
+def send_code(body: SendCodeRequest, db: Session = Depends(get_db)):
+    """向邮箱发 6 位注册验证码（60s 冷却；验证码哈希落库 10 分钟有效）。"""
+    email = body.email.strip().lower()
+    if not EMAIL_RE.match(email) or len(email) > 255:
+        raise HTTPException(422, "邮箱格式不正确")
+    if db.scalar(select(Operator).where(Operator.email == email)):
+        raise HTTPException(409, "该邮箱已注册，请直接登录")
+
+    last = db.scalar(select(EmailCode).where(EmailCode.email == email)
+                     .order_by(EmailCode.created_at.desc()).limit(1))
+    if last is not None and last.created_at is not None:
+        age = (_now() - last.created_at.replace(tzinfo=timezone.utc)).total_seconds()
+        if age < CODE_RESEND_COOLDOWN:
+            raise HTTPException(429, f"发送过于频繁，请 {int(CODE_RESEND_COOLDOWN - age) + 1} 秒后再试")
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    db.execute(EmailCode.__table__.delete().where(EmailCode.email == email))   # 旧码全部作废
+    db.add(EmailCode(email=email, code_hash=_hash_code(email, code),
+                     expires_at=_now() + timedelta(minutes=CODE_TTL_MIN)))
+    db.commit()
+
+    ok, err = mailer.send_mail(email, "SmartSupport 注册验证码",
+                               f"您的验证码是 {code}，{CODE_TTL_MIN} 分钟内有效。若非本人操作请忽略。")
+    dev_code = None
+    if not ok and err is None:
+        # SMTP 未配置：本地联调回退（mail_dev_mode），生产必须关闭
+        if not settings.mail_dev_mode:
+            raise HTTPException(503, "邮件服务未配置，请联系平台管理员")
+        dev_code = code
+        print(f"[mail:dev] 注册验证码 -> {email}: {code}", flush=True)
+    elif not ok:
+        raise HTTPException(502, f"验证码发送失败：{err}")
+
+    resp = {"sent": True, "expires_in": CODE_TTL_MIN * 60}
+    if dev_code is not None:
+        resp["dev_code"] = dev_code   # 仅本地 dev 模式返回
+    return resp
+
+
 class RegisterRequest(BaseModel):
-    tenant_name: str
-    username: str
+    email: str
+    code: str
     password: str
-    display_name: str | None = None
+    tenant_name: str
+
+
+def _derive_username(db: Session, email: str) -> str:
+    """username 由邮箱前缀派生（仅字母数字），冲突加序号；username 是内部字段不再让用户起。"""
+    base = re.sub(r"[^0-9a-zA-Z]", "", email.split("@", 1)[0]).lower()[:48] or "user"
+    if len(base) < 3:
+        base = f"user{base}"
+    for i in range(200):
+        cand = base if i == 0 else f"{base}_{i}"
+        if not db.scalar(select(Operator).where(Operator.username == cand)):
+            return cand
+    return f"u{secrets.token_hex(6)}"
+
+
+def _consume_code(db: Session, email: str, code: str) -> None:
+    row = db.scalar(select(EmailCode).where(EmailCode.email == email)
+                    .order_by(EmailCode.created_at.desc()).limit(1))
+    if row is None or row.used or row.expires_at.replace(tzinfo=timezone.utc) < _now():
+        raise HTTPException(400, "验证码已过期，请重新获取")
+    if row.attempts >= CODE_MAX_ATTEMPTS:
+        raise HTTPException(400, "尝试次数过多，请重新获取验证码")
+    if row.code_hash != _hash_code(email, code.strip()):
+        row.attempts += 1
+        db.commit()
+        raise HTTPException(400, "验证码错误")
+    row.used = True
+    db.flush()
+
+
+@router.post("/register", status_code=201)
+def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    """邮箱注册 = 验证码校验 + 建租户 + owner 操作员 + 默认规则 + 双密钥（公开接口）。"""
+    email = body.email.strip().lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(422, "邮箱格式不正确")
+    if not (2 <= len(body.tenant_name.strip()) <= 64):
+        raise HTTPException(422, "商户名称长度 2-64")
+    if len(body.password) < 6:
+        raise HTTPException(422, "密码至少 6 位")
+    if not (body.code or "").strip():
+        raise HTTPException(422, "请输入邮箱验证码")
+    if db.scalar(select(Operator).where(Operator.email == email)):
+        raise HTTPException(409, "该邮箱已注册，请直接登录")
+    _consume_code(db, email, body.code)
+
+    username = _derive_username(db, email)
+    tenant = Tenant(name=body.tenant_name.strip(),
+                    widget_key=tenant_svc.generate_widget_key(),
+                    api_secret=tenant_svc.generate_api_secret())
+    db.add(tenant)
+    db.flush()
+    ensure_default_rules(db, tenant)
+    op = Operator(tenant_id=tenant.id, username=username, email=email, email_verified=True,
+                  display_name=body.tenant_name.strip() + " 管理员",
+                  role="owner", password_hash=hash_password(body.password))
+    db.add(op)
+    db.commit()
+    db.refresh(tenant)
+    db.refresh(op)
+
+    return {
+        "token": issue_token(str(op.id)),
+        "tenant": _tenant_dict(db, tenant),
+        "operator": {"id": str(op.id), "display_name": op.display_name, "role": op.role,
+                     "email": op.email},
+    }
 
 
 def _embed_code(t: Tenant) -> str:
@@ -52,40 +182,6 @@ def _tenant_dict(db: Session, t: Tenant) -> dict:
         "stats": {"orders": orders, "products": products, "sessions": sessions},
         "embed_code": _embed_code(t),
         "created_at": t.created_at,
-    }
-
-
-@router.post("/register", status_code=201)
-def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    """注册 = 建租户 + owner 操作员 + 默认规则 + 双密钥（公开接口）。"""
-    if not (2 <= len(body.tenant_name.strip()) <= 64):
-        raise HTTPException(422, "商户名称长度 2-64")
-    username = body.username.strip()
-    if not (3 <= len(username) <= 64) or not username.replace("_", "").isalnum():
-        raise HTTPException(422, "用户名 3-64 位，仅字母数字下划线")
-    if len(body.password) < 6:
-        raise HTTPException(422, "密码至少 6 位")
-    if db.scalar(select(Operator).where(Operator.username == username)):
-        raise HTTPException(409, "用户名已被占用")
-
-    tenant = Tenant(name=body.tenant_name.strip(),
-                    widget_key=tenant_svc.generate_widget_key(),
-                    api_secret=tenant_svc.generate_api_secret())
-    db.add(tenant)
-    db.flush()
-    ensure_default_rules(db, tenant)
-    op = Operator(tenant_id=tenant.id, username=username,
-                  display_name=body.display_name or body.tenant_name + " 管理员",
-                  role="owner", password_hash=hash_password(body.password))
-    db.add(op)
-    db.commit()
-    db.refresh(tenant)
-    db.refresh(op)
-
-    return {
-        "token": issue_token(str(op.id)),
-        "tenant": _tenant_dict(db, tenant),
-        "operator": {"id": str(op.id), "display_name": op.display_name, "role": op.role},
     }
 
 

@@ -84,7 +84,7 @@
     <p class="hint" id="authHint">登录您的商户账号，管理 AI 客服</p>
 
     <div id="loginBox">
-      <div class="field"><label>用户名</label><input id="li_user" placeholder="如 shop"></div>
+      <div class="field"><label>邮箱 / 用户名</label><input id="li_user" placeholder="如 you@shop.com"></div>
       <div class="field"><label>密码</label><input id="li_pass" type="password"></div>
       <div class="auth-err" id="li_err"></div>
       <button class="btn btn-p" style="width:100%" id="li_btn">登 录</button>
@@ -93,7 +93,13 @@
 
     <div id="regBox" hidden>
       <div class="field"><label>商户/店铺名称</label><input id="rg_tenant" placeholder="如 星空文创旗舰店"></div>
-      <div class="field"><label>管理员用户名</label><input id="rg_user" placeholder="字母数字下划线，3-64 位"></div>
+      <div class="field"><label>邮箱</label><input id="rg_email" type="email" placeholder="用于登录和接收验证码"></div>
+      <div class="field"><label>验证码</label>
+        <div style="display:flex;gap:8px">
+          <input id="rg_code" placeholder="6 位数字" maxlength="6" style="flex:1">
+          <button class="btn btn-o" id="rg_send" style="white-space:nowrap">发送验证码</button>
+        </div>
+      </div>
       <div class="field"><label>密码</label><input id="rg_pass" type="password" placeholder="至少 6 位"></div>
       <div class="auth-err" id="rg_err"></div>
       <button class="btn btn-p" style="width:100%" id="rg_btn">创建商户，开始接入</button>
@@ -289,7 +295,7 @@ function showAuth(mode) {
   $("auth").hidden = false; $("app").hidden = true;
   $("loginBox").hidden = mode !== "login";
   $("regBox").hidden = mode !== "register";
-  $("authHint").textContent = mode === "register" ? "30 秒注册，立刻拿到接入密钥" : "登录您的商户账号，管理 AI 客服";
+  $("authHint").textContent = mode === "register" ? "邮箱注册，30 秒连接你的电商店铺" : "登录您的商户账号，管理 AI 客服";
 }
 function logout(callApi = true) {
   TOKEN = ""; localStorage.removeItem("ss_token");
@@ -310,18 +316,47 @@ $("li_btn").onclick = async () => {
 };
 $("li_pass").addEventListener("keydown", e => { if (e.key === "Enter") $("li_btn").click(); });
 
+$("rg_send").onclick = async () => {
+  $("rg_err").textContent = "";
+  const email = $("rg_email").value.trim();
+  if (!email) { $("rg_err").textContent = "请先填写邮箱"; return; }
+  const btn = $("rg_send");
+  btn.disabled = true;
+  const r = await api("/api/portal/email/send-code", { method: "POST", body: JSON.stringify({ email }) });
+  const b = await r.json();
+  if (!r.ok) {
+    $("rg_err").textContent = typeof b.detail === "string" ? b.detail : "发送失败，请稍后再试";
+    btn.disabled = false; btn.textContent = "发送验证码";
+    return;
+  }
+  if (b.dev_code) {   // 本地未配 SMTP 的联调模式：验证码直接回显
+    $("rg_code").value = b.dev_code;
+    toast("本地联调模式：验证码已自动填入（生产环境会发到邮箱）");
+  } else {
+    toast("验证码已发送到邮箱，10 分钟内有效");
+  }
+  let left = 60;
+  btn.textContent = left + "s 后重发";
+  const timer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) { clearInterval(timer); btn.disabled = false; btn.textContent = "发送验证码"; }
+    else btn.textContent = left + "s 后重发";
+  }, 1000);
+};
+
 $("rg_btn").onclick = async () => {
   $("rg_err").textContent = "";
   const r = await api("/api/portal/register", { method: "POST", body: JSON.stringify({
     tenant_name: $("rg_tenant").value.trim(),
-    username: $("rg_user").value.trim(),
+    email: $("rg_email").value.trim(),
+    code: $("rg_code").value.trim(),
     password: $("rg_pass").value,
   }) });
   const b = await r.json();
   if (!r.ok) { $("rg_err").textContent = typeof b.detail === "string" ? b.detail : "注册失败，请检查填写"; return; }
   TOKEN = b.token; localStorage.setItem("ss_token", TOKEN);
   enter();
-  toast("🎉 商户创建成功，密钥已生成（见「接入」页）");
+  toast("🎉 商户创建成功，接下来连接你的店铺");
 };
 
 /* ───── 主界面 ───── */

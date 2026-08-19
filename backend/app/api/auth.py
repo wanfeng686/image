@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -36,9 +36,11 @@ def get_current_operator(
 
 @router.post("/login")
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    op = db.scalar(select(Operator).where(Operator.username == body.username))
+    ident = body.username.strip()
+    op = db.scalar(select(Operator).where(
+        (Operator.username == ident) | (func.lower(Operator.email) == ident.lower())))
     if op is None or not verify_password(body.password, op.password_hash):
-        raise HTTPException(status_code=401, detail={"code": "AUTH_FAILED", "message": "用户名或密码错误"})
+        raise HTTPException(status_code=401, detail={"code": "AUTH_FAILED", "message": "邮箱/用户名或密码错误"})
     op.is_online = True
     db.commit()
     return {

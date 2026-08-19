@@ -10,6 +10,8 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from scripts.testutil import register_tenant  # noqa: E402
+
 BASE = "http://127.0.0.1:8000"
 DEMO_KEY = "pk_demo000000000000"
 PASS, FAIL = 0, 0
@@ -89,8 +91,7 @@ def main():
 
     purge_tenant("Widget白名单测试")
 
-    reg = client.post(f"{BASE}/api/portal/register", json={
-        "tenant_name": "Widget白名单测试", "username": "wdgt_test", "password": "pass123"}).json()
+    _, reg = register_tenant(client, "Widget白名单测试", "wdgt@testshop.dev", "pass123")
     H = {"Authorization": f"Bearer {reg['token']}"}
     pk = reg["tenant"]["widget_key"]
     client.put(f"{BASE}/api/portal/origins", headers=H,

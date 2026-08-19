@@ -10,11 +10,12 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from scripts.testutil import register_tenant  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402
 
 from app.core.db import SessionLocal  # noqa: E402
 from app.models import (  # noqa: E402
-    AgentRun, ApprovalAction, ApprovalRequest, ChatSession, ExecutedAction,
+    AgentRun, ApprovalAction, ApprovalRequest, ChatSession, EmailCode, ExecutedAction,
     KbDocument, KbDocumentVersion, Message, MockOrder, MockProduct, MockShipment,
     Operator, RiskRule, EscalationRule, SessionNote, Tenant, User,
 )
@@ -58,6 +59,7 @@ def cleanup():
             db.execute(delete(User).where(User.tenant_id == tid))
             db.execute(delete(Operator).where(Operator.tenant_id == tid))
             db.delete(t)
+        db.execute(delete(EmailCode).where(EmailCode.email.like("%@testshop.dev")))
         db.commit()
 
 
@@ -65,10 +67,8 @@ def main():
     cleanup()
     client = httpx.Client(timeout=180)
 
-    # ── 1. 注册 ──
-    r = client.post(f"{BASE}/api/portal/register", json={
-        "tenant_name": C_NAME, "username": "cowner", "password": "cpass123"})
-    body = r.json()
+    # ── 1. 注册（邮箱+验证码） ──
+    r, body = register_tenant(client, C_NAME, "c-owner@testshop.dev")
     check("注册：201 + 双密钥", r.status_code == 201
           and body["tenant"]["widget_key"].startswith("pk_")
           and body["tenant"]["api_secret"].startswith("sk_"), str(body)[:150])
@@ -80,11 +80,10 @@ def main():
     SK = {"Authorization": f"Bearer {body['tenant']['api_secret']}"}
     pk = body["tenant"]["widget_key"]
 
+    r = client.post(f"{BASE}/api/portal/email/send-code", json={"email": "c-owner@testshop.dev"})
+    check("注册：已注册邮箱再发码 409", r.status_code == 409)
     r = client.post(f"{BASE}/api/portal/register", json={
-        "tenant_name": "再注册", "username": "cowner", "password": "cpass123"})
-    check("注册：重名 username 409", r.status_code == 409)
-    r = client.post(f"{BASE}/api/portal/register", json={
-        "tenant_name": "短", "username": "x2", "password": "123"})
+        "tenant_name": "短", "email": "bad@testshop.dev", "code": "000000", "password": "123"})
     check("注册：弱参数 422", r.status_code == 422)
 
     # ── 2. 开放 API：推数据 ──

@@ -1,6 +1,7 @@
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.operator import Operator
+from app.models.email_code import EmailCode
 from app.models.session import ChatSession
 from app.models.message import Message
 from app.models.ticket import Ticket
@@ -15,7 +16,7 @@ from app.models.eval import EvalCase, EvalRun
 from app.models.model_config import ModelProvider, AgentModelBinding
 
 __all__ = [
-    "Tenant", "User", "Operator", "ChatSession", "Message", "Ticket", "SessionNote",
+    "Tenant", "User", "Operator", "EmailCode", "ChatSession", "Message", "Ticket", "SessionNote",
     "AgentRun", "ApprovalRequest", "ApprovalAction", "ExecutedAction",
     "RiskRule", "EscalationRule",
     "MockProduct", "MockOrder", "MockShipment",
