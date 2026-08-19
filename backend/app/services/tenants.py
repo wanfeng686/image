@@ -1,12 +1,12 @@
-"""租户服务：密钥解析 / 生成 / Origin 白名单校验。
+"""租户服务：密钥解析 / 生成。
 
-三层密钥体系（SaaS 化）：
-- pk_（widget_key）：商户网站的浏览器 → 创建访客会话
+密钥体系（电商渠道化后）：
+- pk_（widget_key）：平台自带演示页创建访客会话（/api/chat，X-Widget-Key）
 - sk_（api_secret）：商户后端 → /api/v1 数据推送与 API 会话
 - Bearer token：商户操作员/平台管理员 → 门户与运营台（见 api/auth.py）
+- 渠道连接凭据：AES-GCM 加密存 channel_connections（见 services/crypto.py）
 """
 import secrets
-import uuid
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -41,17 +41,6 @@ def require_tenant_by_api_secret(db: Session, secret: str | None) -> Tenant:
         raise HTTPException(status_code=401, detail={"code": "INVALID_API_SECRET",
                                                      "message": "API 密钥无效"})
     return tenant
-
-
-def check_widget_origin(tenant: Tenant, origin: str | None) -> None:
-    """Widget 嵌入域白名单：非空白名单时 Origin 必须命中；空 = 宽松模式（本地演示）。"""
-    allowed = tenant.allowed_origins or []
-    if not allowed:
-        return  # 宽松模式：未配置白名单的租户放行（生产建议强制配置）
-    if origin and origin.rstrip("/") in [o.rstrip("/") for o in allowed if isinstance(o, str)]:
-        return
-    raise HTTPException(status_code=403, detail={"code": "ORIGIN_NOT_ALLOWED",
-                                                 "message": f"来源 {origin or '(空)'} 未在白名单"})
 
 
 def generate_widget_key() -> str:

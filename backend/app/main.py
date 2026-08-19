@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
+from app.api.channels import router as channel_router
 from app.api.chat import router as chat_router
 from app.api.console import router as console_router
 from app.api.insights_api import router as insights_router
@@ -12,14 +13,13 @@ from app.api.kbmgmt import router as kb_router
 from app.api.open_api import router as open_api_router
 from app.api.portal import platform_router, router as portal_router
 from app.api.settings_api import router as settings_router
-from app.api.widget import router as widget_router
 
-app = FastAPI(title="SmartSupport API", version="0.3.0")
-app.include_router(auth_router)        # 运营台认证
-app.include_router(chat_router)        # 顾客端聊天（X-Widget-Key 定租户）
-app.include_router(widget_router)      # Widget 接入（pk_ 密钥 + Origin 白名单）
+app = FastAPI(title="SmartSupport API", version="0.4.0")
+app.include_router(auth_router)        # 运营台认证（邮箱或用户名登录）
+app.include_router(chat_router)        # 顾客端聊天（X-Widget-Key 定租户，演示页内部使用）
 app.include_router(open_api_router)    # 开放 API v1（sk_ 密钥，商户后端）
-app.include_router(portal_router)      # 商户门户（注册/密钥/品牌/导入）
+app.include_router(portal_router)      # 商户门户（邮箱注册/密钥/品牌/导入）
+app.include_router(channel_router)     # 渠道连接（电商平台目录/连接 CRUD/测试）
 app.include_router(platform_router)    # 平台管理（admin 跨租户）
 app.include_router(console_router)     # 运营台（鉴权保护，租户隔离）
 app.include_router(kb_router)          # 知识库管理 P5

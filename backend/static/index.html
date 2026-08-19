@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SmartSupport · AI 客服即服务平台</title>
+<title>SmartSupport · 电商 AI 客服平台</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1e293b; background: #f8fafc; }
@@ -22,12 +22,14 @@
   .hero p.sub { margin: 18px auto 0; max-width: 640px; color: #475569; font-size: 17px; line-height: 1.7; }
   .hero-ctas { margin-top: 32px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .hero-ctas .btn { padding: 13px 30px; font-size: 15px; border-radius: 10px; }
+  .plat-band { display: flex; gap: 10px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
+  .plat { background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 8px 18px; font-size: 13.5px; color: #475569; }
+  .plat b { color: #4F46E5; }
   .steps { display: flex; gap: 20px; justify-content: center; margin: 56px auto 0; max-width: 880px; flex-wrap: wrap; }
   .step { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px 24px; width: 260px; text-align: left; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
   .step .n { display: inline-flex; width: 30px; height: 30px; border-radius: 8px; background: #eef2ff; color: #4F46E5; font-weight: 800; align-items: center; justify-content: center; font-size: 14px; }
   .step h3 { margin: 12px 0 6px; font-size: 16px; }
   .step p { color: #64748b; font-size: 13.5px; line-height: 1.6; }
-  .step code { display: block; margin-top: 10px; background: #0f172a; color: #a5b4fc; border-radius: 8px; padding: 9px 11px; font-size: 11.5px; font-family: Consolas, monospace; overflow-x: auto; white-space: nowrap; }
   section.features { max-width: 1080px; margin: 64px auto 0; padding: 0 6vw 72px; }
   section.features h2 { text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 8px; }
   section.features p.center { text-align: center; color: #64748b; margin-bottom: 36px; }
@@ -36,6 +38,12 @@
   .card .icon { font-size: 26px; }
   .card h3 { margin: 12px 0 8px; font-size: 16.5px; }
   .card p { color: #64748b; font-size: 13.5px; line-height: 1.65; }
+  .modes { max-width: 880px; margin: 0 auto 64px; padding: 0 6vw; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
+  .mode { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 26px; position: relative; }
+  .mode .rec { position: absolute; top: -12px; right: 20px; background: #10B981; color: #fff; border-radius: 999px; font-size: 12px; padding: 3px 12px; font-weight: 700; }
+  .mode h3 { font-size: 18px; margin-bottom: 8px; }
+  .mode p { color: #64748b; font-size: 14px; line-height: 1.75; }
   .demo-band { background: #0f172a; color: #e2e8f0; padding: 56px 6vw; text-align: center; }
   .demo-band h2 { font-size: 24px; color: #fff; }
   .demo-band p { margin: 12px auto 28px; color: #94a3b8; max-width: 560px; line-height: 1.7; font-size: 14.5px; }
@@ -58,17 +66,26 @@
 </nav>
 
 <header class="hero">
-  <h1>把<em>AI 智能客服</em>装进你的网站<br>只需一行代码</h1>
-  <p class="sub">注册商户账号，贴一段脚本，你的网站立刻拥有会查订单、能办退款、
-  发送前自带质检的多 Agent 智能客服——人工审批、知识库、运营洞察全部开箱即用。</p>
+  <h1>把<em>AI 智能客服</em>接进你的<br>拼多多 / 淘宝店铺</h1>
+  <p class="sub">邮箱注册，选择你的电商平台，7×24 小时自动接待：查订单、答政策、办退款，
+  发送前自带质检，资金操作有人工审批兜底。没有官方 API？浏览器托管一样能接。</p>
   <div class="hero-ctas">
     <a class="btn btn-primary" href="/portal.html#register">🚀 免费注册接入</a>
     <a class="btn btn-ghost" style="border:1px solid #c7d2fe" href="/demo.html">💬 先体验顾客视角</a>
   </div>
+  <div class="plat-band">
+    <span class="plat">🛒 <b>拼多多</b> 已支持</span>
+    <span class="plat">🟠 淘宝/天猫</span>
+    <span class="plat">🎵 抖音小店</span>
+    <span class="plat">🔴 京东</span>
+    <span class="plat">⚡ 快手小店</span>
+    <span class="plat">📕 小红书</span>
+    <span class="plat">💬 微信小店</span>
+  </div>
   <div class="steps">
-    <div class="step"><span class="n">1</span><h3>注册商户</h3><p>30 秒开通，即刻获得 Widget 密钥与 API 密钥。</p></div>
-    <div class="step"><span class="n">2</span><h3>嵌入网站</h3><p>把这段代码贴进你的网页，客服浮窗立即上线。</p><code>&lt;script src="…/embed.js" data-key="pk_…" async&gt;&lt;/script&gt;</code></div>
-    <div class="step"><span class="n">3</span><h3>导入数据</h3><p>CSV 上传或 API 推送商品与订单，AI 即可查询办理。</p><code>POST /api/v1/orders · Bearer sk_…</code></div>
+    <div class="step"><span class="n">1</span><h3>邮箱注册</h3><p>验证码开通商户账号，30 秒完成。</p></div>
+    <div class="step"><span class="n">2</span><h3>连接店铺</h3><p>选拼多多等平台：有官方 API 填凭据，没有就走浏览器托管。</p></div>
+    <div class="step"><span class="n">3</span><h3>AI 自动接待</h3><p>买家在平台聊天窗发问，AI 查订单、答政策、办退款，全程可审计。</p></div>
   </div>
 </header>
 
@@ -85,19 +102,34 @@
   </div>
 </section>
 
+<div class="modes">
+  <div class="mode">
+    <span class="rec">推荐</span>
+    <h3>🔌 官方 API 接入</h3>
+    <p>在拼多多开放平台申请应用，把 client_id / client_secret 填进来。
+    合规、稳定、官方支持；完成商家授权后补填 access_token 即可收发消息。
+    适合有开发能力或有开放平台资质的商家。</p>
+  </div>
+  <div class="mode">
+    <h3>🤖 浏览器托管（RPA）</h3>
+    <p>没有开放平台资质也能接：提供店铺账号，由托管浏览器登录商家后台收发消息，
+    AI 在后台自动应答。凭据 AES-256-GCM 加密存储。
+    <b style="color:#B45309">注意：RPA 为非官方通道，不符合平台服务协议，存在限流/封店风险，需签署风险知情同意。</b></p>
+  </div>
+</div>
+
 <section class="demo-band">
   <h2>坐进系统的另一侧</h2>
-  <p>双角色演示：先当顾客聊天，再注册一个你自己的商户，把客服嵌到你的页面里，
+  <p>双角色演示：先当买家聊天，再注册一个你自己的商户，连接店铺，
   坐进运营台亲手批一次退款。</p>
   <div class="row">
-    <a class="btn btn-outline" href="/demo.html">💬 顾客视角演示</a>
+    <a class="btn btn-outline" href="/demo.html">💬 买家视角演示</a>
     <a class="btn btn-outline" href="/portal.html#register">🧑‍💼 注册我的商户</a>
-    <a class="btn btn-outline" href="/test-merchant.html">🧪 看嵌入效果示例</a>
   </div>
 </section>
 
 <footer>
-  <span>SmartSupport · LLM 原生多 Agent 智能客服 SaaS</span>
+  <span>SmartSupport · 电商 AI 客服 SaaS</span>
   <a href="/docs" target="_blank">API 文档</a>
   <a href="https://github.com/wanfeng686/image" target="_blank">GitHub</a>
 </footer>

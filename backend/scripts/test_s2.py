@@ -130,11 +130,11 @@ def main():
                    headers={"Authorization": "Bearer sk_demo000000000000"})
     check("sk 越权：跨租户会话 404", r.status_code == 404)
 
-    # ── 4. Widget 通道（pk_）也能查到推来的数据 ──
-    r = client.post(f"{BASE}/api/widget/sessions", json={"user_external_id": "member-42"},
+    # ── 4. 内部演示通道（pk_ 走 /api/chat/sessions）也能查到推来的数据 ──
+    r = client.post(f"{BASE}/api/chat/sessions", json={"user_external_id": "member-42"},
                     headers={"X-Widget-Key": pk})
     check("pk_ 会话：会员识别", r.status_code == 201)
-    sid_w = r.json()["session"]["id"]
+    sid_w = r.json()["id"]
     r = client.post(f"{BASE}/api/chat/sessions/{sid_w}/messages",
                     json={"content": "查一下订单 C-8002"}, timeout=120)
     m = r.json()[1]
@@ -145,28 +145,18 @@ def main():
     r = client.get(f"{BASE}/api/portal/me", headers=H)
     check("门户 me：统计正确", r.json()["stats"]["orders"] == 2
           and r.json()["stats"]["products"] == 2, str(r.json().get("stats")))
-    check("门户 me：embed 代码含 pk", f'data-key="{pk}"' in r.json()["embed_code"])
+    check("门户 me：已无 embed_code", "embed_code" not in r.json())
     r = client.patch(f"{BASE}/api/portal/brand", headers=H,
                      json={"title": "C店小助手", "theme_color": "#FF6B00"})
     check("品牌设置", r.json()["brand"]["title"] == "C店小助手")
-    r = client.put(f"{BASE}/api/portal/origins", headers=H,
-                   json={"origins": ["https://shop-c.example"]})
-    check("白名单设置", r.json()["allowed_origins"] == ["https://shop-c.example"])
-    # 白名单生效：非白名单 Origin 的 widget 请求 403
-    r = client.post(f"{BASE}/api/widget/sessions", json={},
-                    headers={"X-Widget-Key": pk, "Origin": "https://other.example"})
-    check("白名单：外来 Origin 403", r.status_code == 403)
-    r = client.post(f"{BASE}/api/widget/sessions", json={},
-                    headers={"X-Widget-Key": pk, "Origin": "https://shop-c.example"})
-    check("白名单：自家 Origin 放行", r.status_code == 201)
 
-    old_pk = pk
-    r = client.post(f"{BASE}/api/portal/keys/rotate", headers=H, json={"which": "widget"})
-    new_pk = r.json()["widget_key"]
-    check("密钥轮换：pk 变了", new_pk != old_pk and new_pk.startswith("pk_"))
-    r = client.post(f"{BASE}/api/widget/sessions", json={},
-                    headers={"X-Widget-Key": old_pk, "Origin": "https://shop-c.example"})
-    check("旧 pk 失效", r.status_code == 401)
+    old_sk = body["tenant"]["api_secret"]
+    r = client.post(f"{BASE}/api/portal/keys/rotate", headers=H, json={"which": "api"})
+    new_sk = r.json()["api_secret"]
+    check("密钥轮换：sk 变了", new_sk != old_sk and new_sk.startswith("sk_"))
+    r = client.post(f"{BASE}/api/v1/products", headers={"Authorization": f"Bearer {old_sk}"},
+                    json={"items": []})
+    check("旧 sk 失效", r.status_code == 401)
 
     # ── 6. CSV 导入（门户 multipart）──
     csv_products = "sku,name,price,category\nC-003,C店挂耳包,69,食品\n"

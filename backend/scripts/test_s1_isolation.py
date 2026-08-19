@@ -110,23 +110,15 @@ def main():
     client = httpx.Client(timeout=120)
     try:
         # ── 1. 密钥体系 ──
-        r = client.post(f"{BASE}/api/widget/sessions", json={},
+        r = client.post(f"{BASE}/api/chat/sessions", json={},
                         headers={"X-Widget-Key": "pk_wrong"})
         check("密钥：错误 pk_ → 401", r.status_code == 401, str(r.status_code))
 
-        # Origin 白名单：B 配了白名单，错误来源 403，正确来源放行
-        r = client.post(f"{BASE}/api/widget/sessions", json={},
-                        headers={"X-Widget-Key": B_KEY, "Origin": "http://evil.example"})
-        check("Origin：非白名单来源 403", r.status_code == 403, str(r.status_code))
-        r = client.post(f"{BASE}/api/widget/sessions", json={},
-                        headers={"X-Widget-Key": B_KEY, "Origin": "http://merchant-b.local"})
-        check("Origin：白名单来源放行", r.status_code == 201)
-
         # ── 2. 数据隔离：检索/订单 ──
         # B 店顾客问退货政策 → 只命中 B 店的 30 天政策，不是演示商城的 7 天
-        r = client.post(f"{BASE}/api/widget/sessions", json={"user_external_id": "b-customer"},
-                        headers={"X-Widget-Key": B_KEY, "Origin": "http://merchant-b.local"})
-        sid_b = r.json()["session"]["id"]
+        r = client.post(f"{BASE}/api/chat/sessions", json={"user_external_id": "b-customer"},
+                        headers={"X-Widget-Key": B_KEY})
+        sid_b = r.json()["id"]
         m = ask(client, sid_b, "退货政策是什么")
         check("KB 隔离：B 店读到自己的政策", "30天" in (m["content"] or "")
               and "7天" not in (m["content"] or ""), str(m["content"])[:100])

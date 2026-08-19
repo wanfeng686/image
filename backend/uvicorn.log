@@ -1,78 +1,106 @@
 INFO:     Will watch for changes in these directories: ['D:\\test\\smart-support\\backend']
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [26944] using WatchFiles
-INFO:     Started server process [11380]
+INFO:     Started reloader process [22304] using WatchFiles
+INFO:     Started server process [2576]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     127.0.0.1:64993 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65076 - "POST /api/portal/email/send-code HTTP/1.1" 422 Unprocessable Entity
-[mail:dev] 注册验证码 -> c1owner@testshop.dev: 837418
-INFO:     127.0.0.1:65078 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65084 - "POST /api/portal/email/send-code HTTP/1.1" 429 Too Many Requests
-INFO:     127.0.0.1:65086 - "POST /api/portal/register HTTP/1.1" 400 Bad Request
-INFO:     127.0.0.1:65088 - "POST /api/portal/register HTTP/1.1" 201 Created
-INFO:     127.0.0.1:65090 - "POST /api/portal/register HTTP/1.1" 409 Conflict
-INFO:     127.0.0.1:65092 - "POST /api/portal/email/send-code HTTP/1.1" 409 Conflict
-INFO:     127.0.0.1:65094 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65096 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65098 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65100 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65102 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65104 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65218 - "GET /embed.js HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65220 - "GET /widget/?key=pk_demo000000000000&embed=1 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65222 - "GET /test-merchant.html HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65224 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65226 - "GET /demo.html HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65228 - "GET /api/widget/boot?key=pk_demo000000000000 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65230 - "GET /api/widget/boot?key=pk_nope HTTP/1.1" 401 Unauthorized
-WARNING:  WatchFiles detected changes in 'scripts\testutil.py'. Reloading...
- [mail:dev] 注册验证码 -> c-owner@testshop.dev: 471820
-INFO:     127.0.0.1:65438 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65440 - "POST /api/portal/register HTTP/1.1" 201 Created
-INFO:     127.0.0.1:65442 - "GET /api/auth/me HTTP/1.1" 200 OK
-[mail:dev] 注册验证码 -> dup@testshop.dev: 139882
-INFO:     127.0.0.1:65444 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65446 - "POST /api/portal/register HTTP/1.1" 422 Unprocessable Entity
-INFO:     127.0.0.1:65448 - "POST /api/v1/products HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65450 - "POST /api/v1/products HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65452 - "POST /api/v1/orders HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65454 - "POST /api/v1/products HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65456 - "POST /api/v1/sessions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:65458 - "POST /api/v1/sessions/85753e3a-92b9-49c6-9705-e8010dbd03e5/messages HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61011 - "GET /api/v1/sessions/85753e3a-92b9-49c6-9705-e8010dbd03e5/messages HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61013 - "POST /api/v1/sessions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61015 - "GET /api/v1/sessions/85753e3a-92b9-49c6-9705-e8010dbd03e5/messages HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:61017 - "POST /api/widget/sessions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61019 - "POST /api/chat/sessions/8d55d911-a066-4635-9cde-72a91ba9f964/messages HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61028 - "GET /api/portal/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61033 - "PATCH /api/portal/brand HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61035 - "PUT /api/portal/origins HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61037 - "POST /api/widget/sessions HTTP/1.1" 403 Forbidden
-INFO:     127.0.0.1:61039 - "POST /api/widget/sessions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61041 - "POST /api/portal/keys/rotate HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61043 - "POST /api/widget/sessions HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:61045 - "POST /api/portal/import HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61047 - "POST /api/portal/import HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61049 - "GET /api/portal/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61051 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61053 - "GET /api/platform/tenants HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61055 - "GET /api/platform/tenants HTTP/1.1" 403 Forbidden
-INFO:     127.0.0.1:61060 - "GET /embed.js HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61062 - "GET /widget/?key=pk_demo000000000000&embed=1 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61064 - "GET /test-merchant.html HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61066 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61068 - "GET /demo.html HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61070 - "GET /api/widget/boot?key=pk_demo000000000000 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61072 - "GET /api/widget/boot?key=pk_nope HTTP/1.1" 401 Unauthorized
-[mail:dev] 注册验证码 -> wdgt@testshop.dev: 623042
-INFO:     127.0.0.1:61081 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61083 - "POST /api/portal/register HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61085 - "PUT /api/portal/origins HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61087 - "POST /api/widget/sessions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61089 - "POST /api/widget/sessions HTTP/1.1" 403 Forbidden
-INFO:     127.0.0.1:61091 - "POST /api/widget/sessions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:61093 - "POST /api/chat/sessions/dc052dd8-bddf-48f9-8ab8-abdf9e4bad1e/messages/stream HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61189 - "POST /api/portal/email/send-code HTTP/1.1" 429 Too Many Requests
-INFO:     127.0.0.1:57557 - "POST /api/portal/email/send-code HTTP/1.1" 429 Too Many Requests
-INFO:     127.0.0.1:57644 - "POST /api/portal/email/send-code HTTP/1.1" 429 Too Many Requests
+INFO:     127.0.0.1:61594 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61618 - "GET /api/channel/platforms HTTP/1.1" 200 OK
+[mail:dev] 注册验证码 -> c2owner@testshop.dev: 769711
+INFO:     127.0.0.1:61620 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61623 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61625 - "GET /api/portal/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61627 - "POST /api/channel/connections HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:61629 - "POST /api/channel/connections HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:61631 - "POST /api/channel/connections HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:61633 - "POST /api/channel/connections HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61635 - "POST /api/channel/connections HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:61637 - "POST /api/channel/connections/5e738c1b-e983-418d-a916-ab21323ea0da/test HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61645 - "PATCH /api/channel/connections/5e738c1b-e983-418d-a916-ab21323ea0da HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61649 - "PATCH /api/channel/connections/5e738c1b-e983-418d-a916-ab21323ea0da HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61651 - "PATCH /api/channel/connections/5e738c1b-e983-418d-a916-ab21323ea0da HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61653 - "DELETE /api/channel/connections/5e738c1b-e983-418d-a916-ab21323ea0da HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61658 - "GET /api/channel/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61660 - "POST /api/channel/connections HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61662 - "POST /api/widget/sessions HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:61667 - "GET /embed.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61669 - "GET /widget/ HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61671 - "GET /test-merchant.html HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61673 - "POST /api/chat/sessions HTTP/1.1" 201 Created
+WARNING:  WatchFiles detected changes in 'scripts\test_c2_channels.py'. Reloading...
+ INFO:     127.0.0.1:49745 - "GET /api/channel/platforms HTTP/1.1" 200 OK
+[mail:dev] 注册验证码 -> c2owner@testshop.dev: 436281
+INFO:     127.0.0.1:49747 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49749 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49751 - "GET /api/portal/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49753 - "POST /api/channel/connections HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:49755 - "POST /api/channel/connections HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:49757 - "POST /api/channel/connections HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:49759 - "POST /api/channel/connections HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49764 - "POST /api/channel/connections HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:49766 - "POST /api/channel/connections/763d3225-fe3c-4c87-b368-eaa8dac60a3c/test HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49774 - "PATCH /api/channel/connections/763d3225-fe3c-4c87-b368-eaa8dac60a3c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49776 - "PATCH /api/channel/connections/763d3225-fe3c-4c87-b368-eaa8dac60a3c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49778 - "PATCH /api/channel/connections/763d3225-fe3c-4c87-b368-eaa8dac60a3c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49780 - "DELETE /api/channel/connections/763d3225-fe3c-4c87-b368-eaa8dac60a3c HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49785 - "GET /api/channel/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49787 - "POST /api/channel/connections HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49789 - "POST /api/widget/sessions HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:49791 - "GET /embed.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49793 - "GET /widget/ HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49795 - "GET /test-merchant.html HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49797 - "POST /api/chat/sessions HTTP/1.1" 201 Created
+[mail:dev] 注册验证码 -> c-owner@testshop.dev: 096208
+INFO:     127.0.0.1:50543 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50545 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50547 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50549 - "POST /api/portal/email/send-code HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:50551 - "POST /api/portal/register HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:50553 - "POST /api/v1/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50555 - "POST /api/v1/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50557 - "POST /api/v1/orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50559 - "POST /api/v1/products HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50561 - "POST /api/v1/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50563 - "POST /api/v1/sessions/ab172be9-3fc5-4970-a187-14995dc9ceee/messages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50648 - "GET /api/v1/sessions/ab172be9-3fc5-4970-a187-14995dc9ceee/messages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50650 - "POST /api/v1/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50652 - "GET /api/v1/sessions/ab172be9-3fc5-4970-a187-14995dc9ceee/messages HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50654 - "POST /api/chat/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50656 - "POST /api/chat/sessions/06716e2e-a70e-4646-ab1e-d5a3404a152f/messages HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50665 - "GET /api/portal/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50667 - "PATCH /api/portal/brand HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50669 - "POST /api/portal/keys/rotate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50671 - "POST /api/v1/products HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50673 - "POST /api/portal/import HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50675 - "POST /api/portal/import HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50677 - "GET /api/portal/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50679 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50681 - "GET /api/platform/tenants HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50683 - "GET /api/platform/tenants HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:61571 - "POST /api/widget/sessions HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:61573 - "POST /api/widget/sessions HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:61575 - "POST /api/widget/sessions HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:61578 - "POST /api/widget/sessions HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:62026 - "POST /api/chat/sessions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62029 - "POST /api/chat/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62031 - "POST /api/chat/sessions/778b35b6-d80c-4660-a24f-e5ecdf9039ac/messages HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62109 - "POST /api/chat/sessions/778b35b6-d80c-4660-a24f-e5ecdf9039ac/messages HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62114 - "POST /api/chat/sessions/778b35b6-d80c-4660-a24f-e5ecdf9039ac/messages HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62127 - "POST /api/chat/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62130 - "POST /api/chat/sessions/33b7fee0-eaed-437e-a5ea-394cdf2aaace/messages HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62171 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62177 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62179 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62181 - "GET /api/console/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62183 - "GET /api/console/sessions/33b7fee0-eaed-437e-a5ea-394cdf2aaace HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:62186 - "GET /api/console/sessions/778b35b6-d80c-4660-a24f-e5ecdf9039ac HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:62188 - "GET /api/console/sessions/778b35b6-d80c-4660-a24f-e5ecdf9039ac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62190 - "GET /api/console/kb/documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58798 - "GET /portal.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58798 - "GET /api/portal/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:55638 - "GET /portal.html HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:61355 - "GET /portal.html HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:64198 - "POST /api/portal/email/send-code HTTP/1.1" 422 Unprocessable Entity
+[mail:dev] 注册验证码 -> wizard@demo-tenant.local: 078339
+INFO:     127.0.0.1:60535 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49251 - "POST /api/portal/email/send-code HTTP/1.1" 422 Unprocessable Entity

@@ -162,11 +162,6 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 
-def _embed_code(t: Tenant) -> str:
-    # {ORIGIN} 占位：门户前端用当前访问的 origin 替换后展示
-    return f'<script src="{{ORIGIN}}/embed.js" data-key="{t.widget_key}" async></script>'
-
-
 def _tenant_dict(db: Session, t: Tenant) -> dict:
     orders = db.scalar(select(func.count()).select_from(MockOrder)
                        .where(MockOrder.tenant_id == t.id))
@@ -180,7 +175,6 @@ def _tenant_dict(db: Session, t: Tenant) -> dict:
         "brand": tenant_svc.brand_dict(t),
         "allowed_origins": t.allowed_origins or [],
         "stats": {"orders": orders, "products": products, "sessions": sessions},
-        "embed_code": _embed_code(t),
         "created_at": t.created_at,
     }
 
@@ -212,41 +206,19 @@ def update_brand(body: BrandRequest, db: Session = Depends(get_db),
     return {"brand": tenant_svc.brand_dict(t)}
 
 
-class OriginsRequest(BaseModel):
-    origins: list[str]
-
-
-@router.put("/origins")
-def update_origins(body: OriginsRequest, db: Session = Depends(get_db),
-                   op: Operator = Depends(get_current_operator)):
-    if len(body.origins) > 20:
-        raise HTTPException(422, "最多 20 个域名")
-    cleaned = []
-    for o in body.origins:
-        o = (o or "").strip().rstrip("/")
-        if o and o not in cleaned:
-            cleaned.append(o)
-    t = _get_tenant(db, op)
-    t.allowed_origins = cleaned
-    db.commit()
-    return {"allowed_origins": cleaned}
-
-
 class RotateRequest(BaseModel):
-    which: str = "both"   # widget | api | both
+    which: str = "api"   # 仅 sk_（api）；pk_ 为内部演示密钥不再对外轮换
 
 
 @router.post("/keys/rotate")
 def rotate_keys(body: RotateRequest, db: Session = Depends(get_db),
                 op: Operator = Depends(get_current_operator)):
-    """轮换密钥：旧密钥立即失效（嵌入代码需更新）。"""
+    """轮换 API 密钥：旧 sk_ 立即失效（商户后端需更新）。"""
     t = _get_tenant(db, op)
-    if body.which in ("widget", "both"):
-        t.widget_key = tenant_svc.generate_widget_key()
-    if body.which in ("api", "both"):
+    if body.which == "api":
         t.api_secret = tenant_svc.generate_api_secret()
     db.commit()
-    return {"widget_key": t.widget_key, "api_secret": t.api_secret}
+    return {"api_secret": t.api_secret}
 
 
 # ---------- 数据导入（门户 CSV 上传，与 /api/v1 JSON 推送共用处理内核） ----------
