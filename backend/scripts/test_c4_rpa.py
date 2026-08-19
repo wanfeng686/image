@@ -96,7 +96,7 @@ def main():
         t.check("worker：首轮无消息（机器人未发问）", acts1 == [], str(acts1)[:100])
 
         time.sleep(3.0)   # 机器人买家在登录后 ~1.8s 发第一条
-        acts2 = run_cycle(pw, adapters, headless=True)
+        acts2 = [a for a in run_cycle(pw, adapters, headless=True) if a["conn"] == cid]
         t.check("worker：处理了买家消息", len(acts2) == 1
                 and "S-7701" in acts2[0]["inbound"], str(acts2)[:200])
         t.check("worker：AI 回复含订单信息",

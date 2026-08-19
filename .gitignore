@@ -11,3 +11,4 @@ __pycache__/
 
 # 前端（以后用）
 node_modules/backend/rpa_profiles/
+backend/uvicorn.log
