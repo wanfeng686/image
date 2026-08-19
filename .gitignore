@@ -10,4 +10,4 @@ __pycache__/
 .vscode/
 
 # 前端（以后用）
-node_modules/
+node_modules/backend/rpa_profiles/

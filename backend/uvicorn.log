@@ -18,3 +18,23 @@ INFO:     127.0.0.1:56375 - "POST /api/portal/register HTTP/1.1" 201 Created
 INFO:     127.0.0.1:56377 - "POST /api/channel/connections HTTP/1.1" 201 Created
 INFO:     127.0.0.1:56379 - "POST /api/v1/products HTTP/1.1" 200 OK
 INFO:     127.0.0.1:56381 - "POST /api/v1/orders HTTP/1.1" 200 OK
+[mail:dev] 注册验证码 -> c4owner@testshop.dev: 023039
+INFO:     127.0.0.1:60191 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60193 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:60195 - "POST /api/v1/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60197 - "POST /api/v1/orders HTTP/1.1" 200 OK
+[mail:dev] 注册验证码 -> c4owner@testshop.dev: 710975
+INFO:     127.0.0.1:60401 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60403 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:60405 - "POST /api/v1/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60410 - "POST /api/v1/orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60412 - "POST /api/channel/connections HTTP/1.1" 201 Created
+INFO:     127.0.0.1:59596 - "GET /simulator/ HTTP/1.1" 200 OK
+[mail:dev] 注册验证码 -> c4owner@testshop.dev: 291249
+INFO:     127.0.0.1:64414 - "POST /api/portal/email/send-code HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64416 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:64419 - "POST /api/v1/products HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64421 - "POST /api/v1/orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64423 - "POST /api/channel/connections HTTP/1.1" 201 Created
+INFO:     127.0.0.1:62824 - "GET /simulator/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62899 - "DELETE /api/channel/connections/e29a0aaf-2ff3-48da-8ff7-48f431e88055 HTTP/1.1" 200 OK

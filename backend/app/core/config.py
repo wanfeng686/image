@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     smtp_from: str = ""          # 发件人地址，缺省用 smtp_user
     mail_dev_mode: bool = True
+    # RPA 渠道目标：simulator=内置模拟后台（演示/测试），real=真实商家后台（需联调选择器）
+    channel_rpa_target: str = "simulator"
+    channel_sim_url: str = "http://127.0.0.1:8000/simulator/"
 
     model_config = {"env_file": ".env"}
 
