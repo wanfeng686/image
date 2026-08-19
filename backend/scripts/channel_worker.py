@@ -60,6 +60,10 @@ def run_cycle(pw, adapters: dict, headless: bool = True) -> list[dict]:
             try:
                 for m in entry.fetch_new_messages():
                     reply = bridge.process_channel_message(db, conn, m)
+                    if reply is None:  # BYOK 未配置等场景：跳过不回，不崩 worker
+                        actions.append({"conn": str(conn.id), "conv": m.conversation_ref,
+                                        "inbound": m.text[:60], "reply": "(skipped: 模型未配置)"})
+                        continue
                     entry.send_reply(reply)
                     actions.append({"conn": str(conn.id), "conv": m.conversation_ref,
                                     "inbound": m.text[:60], "reply": reply.text[:60]})

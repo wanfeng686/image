@@ -34,7 +34,7 @@ vi backend/.env   # 填三项：
 
 ```ini
 LLM_API_KEY=sk-你的DeepSeek或其他OpenAI兼容key   # 平台默认模型
-SECRET_KEY=用下面命令生成                          # 必填！token 签名 + 渠道凭据 AES-GCM 加密
+SECRET_KEY=用下面命令生成                          # 必填！token 签名 + 渠道/模型密钥 AES-GCM 加密
 SMTP_HOST=smtp.qq.com                              # 注册验证码发信（必配！）
 SMTP_USER=you@qq.com
 SMTP_PASS=你的SMTP授权码
@@ -119,7 +119,8 @@ curl https://你的域名/api/health          # {"status":"ok",...}
 
 ## 7. 安全检查单（上线前过一遍）
 
-- [ ] `SECRET_KEY` 已设置（32 字节随机；同时是渠道凭据加密密钥，**换密钥=已存凭据作废**）
+- [ ] `SECRET_KEY` 已设置（32 字节随机；同时是渠道凭据与**商户模型 api_key** 的加密密钥，**换密钥=已存密文全部作废**）
+- [ ] BYOK 语义已知晓：商户必须自带模型服务（未配置则 AI 不回复，409 闸门），平台 `.env` 的 LLM_* 仅服务演示租户种子与平台内部工具
 - [ ] `POSTGRES_PASSWORD` 已改强密码
 - [ ] SMTP 已配置且 `MAIL_DEV_MODE=false`（开着=验证码明文返回给任何请求方）
 - [ ] `backend/.env` 权限 600，且不在 git 里（`.gitignore` 已覆盖）

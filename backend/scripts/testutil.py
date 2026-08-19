@@ -9,15 +9,35 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def register_tenant(client, tenant_name: str, email: str, password: str = "pass123456",
-                    base: str = "http://127.0.0.1:8000"):
-    """走完整邮箱注册流程，返回 (注册响应, 响应体)。"""
+                    base: str = "http://127.0.0.1:8000", with_ai: bool = False):
+    """走完整邮箱注册流程，返回 (注册响应, 响应体)。
+
+    with_ai=True 时顺手用平台 .env 的模型配置补 BYOK（否则聊天会被 409 闸门拦）。
+    """
     r = client.post(f"{base}/api/portal/email/send-code", json={"email": email})
     code = r.json().get("dev_code")
     if code is None:
         raise RuntimeError(f"send-code 未返回 dev_code（检查 MAIL_DEV_MODE）：{r.text[:200]}")
     r2 = client.post(f"{base}/api/portal/register", json={
         "tenant_name": tenant_name, "email": email, "code": code, "password": password})
-    return r2, r2.json()
+    body = r2.json()
+    if with_ai and r2.status_code == 201:
+        configure_ai(client, body["token"], base=base)
+    return r2, body
+
+
+def configure_ai(client, token: str, base: str = "http://127.0.0.1:8000"):
+    """用平台 .env 的模型服务给新注册商户补 BYOK 配置（测试辅助）。"""
+    from app.core.config import settings
+
+    r = client.put(f"{base}/api/portal/ai-config",
+                   headers={"Authorization": f"Bearer {token}"},
+                   json={"base_url": settings.llm_base_url,
+                         "api_key": settings.llm_api_key,
+                         "model": settings.llm_model})
+    if r.status_code != 200:
+        raise RuntimeError(f"configure_ai 失败：{r.text[:200]}")
+    return r.json()
 
 
 class Tally:

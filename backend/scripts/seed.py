@@ -21,9 +21,11 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.security import hash_password
 from app.models import (
-    EscalationRule, EvalCase, KbDocument, KbDocumentVersion, MockOrder,
-    MockProduct, MockShipment, ModelProvider, Operator, RiskRule, Tenant, User,
+    AgentModelBinding, EscalationRule, EvalCase, KbDocument, KbDocumentVersion,
+    MockOrder, MockProduct, MockShipment, ModelProvider, Operator, RiskRule,
+    Tenant, User,
 )
+from app.services import crypto
 
 now = datetime.now(timezone.utc)
 
@@ -235,12 +237,29 @@ def seed():
                 db.flush()
                 row.current_version_id = ver.id
 
-        # 8. 模型供应商（租户内；未配置租户走 .env 默认）
+        # 8. 模型供应商（BYOK）：平台 .env 的 DeepSeek 作为演示租户自有供应商
+        #    （api_key 密文落库；BYOK 闸门要求每个租户自带模型，演示租户也不例外）
         for p in PROVIDERS:
-            if db.scalar(select(ModelProvider).where(
-                    ModelProvider.tenant_id == tenant.id,
-                    ModelProvider.name == p["name"])) is None:
-                db.add(ModelProvider(tenant_id=tenant.id, **p))
+            row = db.scalar(select(ModelProvider).where(
+                ModelProvider.tenant_id == tenant.id,
+                ModelProvider.name == p["name"]))
+            if row is None:
+                row = ModelProvider(tenant_id=tenant.id, name=p["name"],
+                                    base_url=p["base_url"],
+                                    api_key=crypto.seal_api_key(p["api_key"]))
+                db.add(row)
+                db.flush()
+            elif not crypto.plain_api_key(row.api_key):
+                row.api_key = crypto.seal_api_key(p["api_key"])
+            # 五个 Agent 全量绑定（同一模型，门户简单模式的等价形态）
+            for agent in ("triage", "knowledge", "qc", "resolution", "insight"):
+                if db.scalar(select(AgentModelBinding).where(
+                        AgentModelBinding.tenant_id == tenant.id,
+                        AgentModelBinding.agent_name == agent)) is None:
+                    db.add(AgentModelBinding(tenant_id=tenant.id, agent_name=agent,
+                                             provider_id=row.id,
+                                             model_name=settings.llm_model,
+                                             temperature=0))
 
         # 9. Eval 黄金集（平台级，跑在演示租户上）
         for i, case in enumerate(EVAL_CASES):

@@ -25,4 +25,5 @@ class Tenant(Base):
     api_secret: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     brand: Mapped[dict] = mapped_column(JSONB, default=dict)                 # {title, welcome, theme_color, avatar}
     allowed_origins: Mapped[list] = mapped_column(JSONB, default=list)       # Widget 嵌入域名白名单
+    prompts: Mapped[dict] = mapped_column(JSONB, default=dict)               # 提示词模板覆盖 {slot: 文本}，空=平台默认
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

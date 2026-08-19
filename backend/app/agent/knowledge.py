@@ -7,10 +7,12 @@ SYSTEM_PROMPT = """你是电商平台的客服知识助手。严格遵守：
 4. 回答控制在3句话以内。"""
 
 
-def build_messages(question: str, chunks: list[dict]) -> list[dict]:
+def build_messages(question: str, chunks: list[dict],
+                   system_prompt: str | None = None) -> list[dict]:
+    """system_prompt：租户覆盖的人设模板（BYOK 提示词自定义），None = 平台默认。"""
     context = "\n\n".join(f"[{c['id']}] {c['title']}：{c['content']}" for c in chunks)
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
         {"role": "user", "content": f"【知识片段】\n{context}\n\n【顾客问题】\n{question}"},
     ]
 

@@ -43,3 +43,16 @@ def mask(value: str | None) -> str:
     if len(value) <= 6:
         return "*" * len(value)
     return value[:2] + "*" * (len(value) - 4) + value[-2:]
+
+
+def seal_api_key(plain: str) -> str:
+    """模型供应商 api_key 密文格式（model_providers 专用）。"""
+    return seal({"api_key": plain})
+
+
+def plain_api_key(blob: str | None) -> str:
+    """密文 → 明文 api_key；解不开（密钥轮换/历史明文）原样返回，交由调用方容错。"""
+    data = unseal(blob)
+    if "api_key" in data:
+        return data["api_key"]
+    return blob or ""

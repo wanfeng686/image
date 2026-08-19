@@ -160,6 +160,7 @@
       <button data-tab="ops">🎛️ 运营</button>
     </nav>
     <div class="right">
+      <span id="aiBadge" hidden style="background:#FEF3C7;color:#B45309;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer">⚠️ AI 模型未配置</span>
       <span id="whoami"></span>
       <span class="avatar" id="avatar">店</span>
       <button class="btn btn-o btn-sm" id="logoutBtn">退出</button>
@@ -266,6 +267,37 @@ curl -X POST {ORIGIN}/api/v1/orders \
           <a class="btn btn-o btn-sm" href="/docs" target="_blank">完整 API 文档（Swagger）</a>
         </div>
       </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h2>🤖 AI 模型与提示词（自带模型）</h2>
+        <p class="desc">填写你自己的大模型服务（OpenAI 兼容：DeepSeek / 通义 / 智谱 / 本地 Ollama 均可）。
+        平台只提供客服引擎与默认模板，模型与内容由你掌握；密钥经 AES-256-GCM 加密存储。
+        <b>未完成配置前 AI 客服不会回复任何消息。</b></p>
+        <div id="aiStatus" style="margin-bottom:14px"></div>
+        <div class="grid2">
+          <div>
+            <div class="field"><label>Base URL</label><input id="ai_base" placeholder="https://api.deepseek.com"></div>
+            <div class="field"><label>API Key <span class="muted" id="aiKeyHint">（首次必填）</span></label>
+              <input id="ai_key" type="password" autocomplete="new-password" placeholder="sk-…"></div>
+            <div class="field"><label>模型名称</label><input id="ai_model" placeholder="deepseek-chat"></div>
+            <div class="field"><label>温度（0-2，选填）</label><input id="ai_temp" type="number" min="0" max="2" step="0.1"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-p btn-sm" onclick="saveAI()">💾 保存模型配置</button>
+              <button class="btn btn-o btn-sm" onclick="testAI()">🔌 测试连接</button>
+              <button class="btn btn-danger btn-sm" onclick="disableAI()">停用自有模型</button>
+            </div>
+          </div>
+          <div>
+            <div class="field"><label>客服人设提示词模板 <span class="muted" id="aiPromptLen"></span></label>
+              <textarea id="ai_prompt" rows="13" style="font-size:12.5px;line-height:1.7;font-family:inherit"></textarea></div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-p btn-sm" onclick="savePrompt()">💾 保存模板</button>
+              <button class="btn btn-o btn-sm" onclick="resetPrompt()">↩️ 恢复默认模板</button>
+            </div>
+            <p class="muted" id="aiPromptHint" style="margin-top:8px"></p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ─── 运营 Tab ─── -->
@@ -288,15 +320,35 @@ curl -X POST {ORIGIN}/api/v1/orders \
 <div id="wizard" hidden>
   <div class="wz-card">
     <h2 style="font-size:17px;margin-bottom:4px">连接你的店铺</h2>
-    <p class="muted" style="margin-bottom:16px">三步完成：选择平台 → 接入方式 → 填写凭据</p>
+    <p class="muted" style="margin-bottom:16px">四步完成：AI 模型 → 选择平台 → 接入方式 → 填写凭据</p>
     <div class="wz-steps" id="wzSteps">
-      <span class="s on" data-s="1"><span class="n">1</span>选择平台</span><i>›</i>
-      <span class="s" data-s="2"><span class="n">2</span>接入方式</span><i>›</i>
-      <span class="s" data-s="3"><span class="n">3</span>填写凭据</span>
+      <span class="s on" data-s="0"><span class="n">1</span>AI 模型</span><i>›</i>
+      <span class="s" data-s="1"><span class="n">2</span>选择平台</span><i>›</i>
+      <span class="s" data-s="2"><span class="n">3</span>接入方式</span><i>›</i>
+      <span class="s" data-s="3"><span class="n">4</span>填写凭据</span>
+    </div>
+
+    <!-- Step 0 AI 模型（BYOK 强制） -->
+    <div id="wz0" hidden>
+      <div id="wz0_ok" hidden style="text-align:center;padding:16px 0">
+        <div style="font-size:38px">✅</div>
+        <p style="margin:10px 0 4px">已配置模型服务：<b id="wz0OkModel"></b></p>
+        <p class="muted" id="wz0OkBase" style="margin-bottom:16px"></p>
+        <button class="btn btn-p" id="wz0Skip">下一步：选择平台 →</button>
+      </div>
+      <div id="wz0_form">
+        <p class="muted" style="margin-bottom:12px">接入前需配置你自己的大模型服务（OpenAI 兼容：
+        DeepSeek / 通义 / 智谱 / 本地 Ollama）。密钥加密存储，仅在你的顾客对话时调用。</p>
+        <div class="field"><label>Base URL</label><input id="wz0_base" placeholder="https://api.deepseek.com"></div>
+        <div class="field"><label>API Key</label><input id="wz0_key" type="password" autocomplete="new-password" placeholder="sk-…"></div>
+        <div class="field"><label>模型名称</label><input id="wz0_model_name" placeholder="deepseek-chat"></div>
+        <div class="wz-err" id="wz0_err"></div>
+        <div class="wz-foot"><span></span><button class="btn btn-p" id="wz0Save">保存并继续 →</button></div>
+      </div>
     </div>
 
     <!-- Step 1 平台 -->
-    <div id="wz1">
+    <div id="wz1" hidden>
       <div class="plat-grid" id="platGrid"></div>
       <div class="wz-foot"><span></span><button class="btn btn-p" id="wz1Next" disabled>下一步 →</button></div>
     </div>
@@ -355,6 +407,7 @@ let TOKEN = localStorage.getItem("ss_token") || "";
 let TENANT = null;
 let PLATFORMS = [];          // 目录
 let CONNECTIONS = [];        // 已有连接
+let AI = { ready: false };   // ai-config 快照
 
 const $ = id => document.getElementById(id);
 
@@ -458,7 +511,8 @@ async function enter() {
   $("auth").hidden = true; $("app").hidden = false;
   $("whoami").textContent = TENANT.name;
   render();
-  await loadConnections(true);   // 首次进入且无连接 → 自动弹向导
+  await loadAI();
+  await loadConnections(true);   // 首次进入且无连接/AI 未配置 → 自动弹向导
 }
 
 function render() {
@@ -488,7 +542,7 @@ async function loadConnections(autoWizard = false) {
   if (!r.ok) return;
   CONNECTIONS = (await r.json()).items || [];
   renderConnections();
-  if (autoWizard && CONNECTIONS.length === 0) openWizard();
+  if (autoWizard && (CONNECTIONS.length === 0 || !AI.ready)) openWizard();
 }
 
 function renderConnections() {
@@ -538,16 +592,137 @@ function renderConnections() {
 }
 $("addConnBtn").onclick = () => openWizard();
 
+/* ───── AI 模型与提示词（BYOK） ───── */
+async function loadAI() {
+  const r = await api("/api/portal/ai-config");
+  if (!r.ok) return;
+  applyAI(await r.json());
+}
+
+function applyAI(data) {
+  AI = data;
+  const p = data.provider, slot = data.prompts.knowledge_system;
+  // 顶栏警示徽标
+  $("aiBadge").hidden = !!data.ready;
+  // 状态行
+  $("aiStatus").innerHTML = data.ready
+    ? `<span class="chip" style="background:#D1FAE5;color:#065F46">✅ 已配置${p ? ` · ${p.model || ""} @ ${p.base_url}` : ""}${p && p.api_key_masked ? ` · 密钥 ${p.api_key_masked}` : ""}</span>`
+    : '<span class="chip" style="background:#FEF3C7;color:#B45309">⚠️ 未配置——AI 客服暂停回复，请完成模型配置</span>';
+  // 表单回显（key 不回显，占位提示已有掩码）
+  if (p) {
+    if (document.activeElement !== $("ai_base")) $("ai_base").value = p.base_url || "";
+    if (document.activeElement !== $("ai_model")) $("ai_model").value = p.model || "";
+    if (document.activeElement !== $("ai_temp")) $("ai_temp").value = p.temperature ?? "";
+    $("ai_key").value = "";
+    $("ai_key").placeholder = p.api_key_masked ? `已保存 ${p.api_key_masked}（留空 = 不变）` : "sk-…";
+    $("aiKeyHint").textContent = "（留空 = 保持不变）";
+  }
+  // 提示词模板
+  if (document.activeElement !== $("ai_prompt")) $("ai_prompt").value = slot.effective;
+  $("aiPromptLen").textContent = `${$("ai_prompt").value.length} / ${slot.max_len} 字` +
+    (slot.override ? "（已自定义）" : "（平台默认）");
+  $("aiPromptHint").textContent = slot.desc;
+}
+
+function promptLen() {
+  $("aiPromptLen").textContent = `${$("ai_prompt").value.length} / ${AI.prompts?.knowledge_system?.max_len || 4000} 字`;
+}
+$("ai_prompt").addEventListener("input", promptLen);
+
+async function saveAI() {
+  const body = {};
+  const base = $("ai_base").value.trim(), model = $("ai_model").value.trim(), key = $("ai_key").value.trim();
+  if (base) body.base_url = base;
+  if (model) body.model = model;
+  if (key) body.api_key = key;
+  const temp = $("ai_temp").value;
+  if (temp !== "") body.temperature = parseFloat(temp);
+  if (!AI.provider && !(body.base_url && body.model && body.api_key)) {
+    toast("首次配置需填写 Base URL、API Key 与模型名称", false); return;
+  }
+  const r = await api("/api/portal/ai-config", { method: "PUT", body: JSON.stringify(body) });
+  const b = await r.json();
+  if (!r.ok) { toast(typeof b.detail === "string" ? b.detail : "保存失败", false); return; }
+  applyAI(b);
+  toast("模型配置已保存，AI 客服就绪 ✅");
+}
+
+async function testAI() {
+  toast("测试中…");
+  const r = await api("/api/portal/ai-config/test", { method: "POST",
+    body: JSON.stringify({ model: $("ai_model").value.trim() || null }) });
+  const b = await r.json();
+  if (!r.ok) { toast(typeof b.detail === "string" ? b.detail : "无法测试", false); return; }
+  toast(b.ok ? `✅ 连接正常（${b.model}）` : `❌ ${b.error || "测试失败"}`, b.ok);
+}
+
+async function disableAI() {
+  if (!confirm("停用后将回到未配置状态，AI 客服暂停回复所有消息。确定？")) return;
+  const r = await api("/api/portal/ai-config", { method: "PUT", body: JSON.stringify({ disable: true }) });
+  if (r.ok) { applyAI(await r.json()); toast("已停用自有模型"); }
+}
+
+async function savePrompt() {
+  const text = $("ai_prompt").value;
+  const r = await api("/api/portal/ai-config", { method: "PUT",
+    body: JSON.stringify({ knowledge_system: text }) });
+  const b = await r.json();
+  if (!r.ok) { toast(typeof b.detail === "string" ? b.detail : "保存失败（可能超长）", false); return; }
+  applyAI(b);
+  toast("人设模板已保存 ✅");
+}
+
+async function resetPrompt() {
+  if (!confirm("恢复平台默认模板？当前自定义内容将被清除。")) return;
+  const r = await api("/api/portal/ai-config", { method: "PUT", body: JSON.stringify({ knowledge_system: "" }) });
+  const b = await r.json();
+  if (!r.ok) { toast("恢复失败", false); return; }
+  applyAI(b);
+  toast("已恢复默认模板 ↩️");
+}
+
+$("aiBadge").onclick = () => {
+  document.querySelector('.tabs button[data-tab="settings"]').click();
+  setTimeout(() => $("aiStatus").scrollIntoView({ behavior: "smooth" }), 60);
+};
+
 /* ───── 接入向导 ───── */
 let WZ = { platform: null, mode: null };
 
 function openWizard() {
   WZ = { platform: null, mode: null };
-  wzGo(1);
+  wzGo(AI.ready ? 1 : 0);
+  renderWz0();
   $("wizard").hidden = false;
   renderPlatGrid();
 }
 $("wizard").addEventListener("click", e => { if (e.target === $("wizard")) $("wizard").hidden = true; });
+
+function renderWz0() {
+  const ok = $("wz0_ok"), form = $("wz0_form");
+  if (AI.ready) {
+    ok.hidden = false; form.hidden = true;
+    $("wz0OkModel").textContent = (AI.provider?.model || "已绑定模型") + "（已就绪）";
+    $("wz0OkBase").textContent = AI.provider ? AI.provider.base_url : "";
+  } else {
+    ok.hidden = true; form.hidden = false;
+  }
+}
+
+$("wz0Skip").onclick = () => wzGo(1);
+$("wz0Save").onclick = async () => {
+  $("wz0_err").textContent = "";
+  const base = $("wz0_base").value.trim(), key = $("wz0_key").value.trim(),
+        model = $("wz0_model_name").value.trim();
+  if (!(base && key && model)) { $("wz0_err").textContent = "Base URL / API Key / 模型名称均为必填"; return; }
+  const r = await api("/api/portal/ai-config", { method: "PUT",
+    body: JSON.stringify({ base_url: base, api_key: key, model }) });
+  const b = await r.json();
+  if (!r.ok) { $("wz0_err").textContent = typeof b.detail === "string" ? b.detail : "保存失败"; return; }
+  applyAI(b);
+  toast("模型配置完成 ✅ 接下来连接店铺");
+  wzGo(1);
+};
 
 function renderPlatGrid() {
   const grid = $("platGrid");
@@ -570,9 +745,10 @@ function renderPlatGrid() {
 }
 
 function wzGo(step) {
-  [1, 2, 3, 4].forEach(i => $("wz" + i).hidden = i !== step);
+  [0, 1, 2, 3, 4].forEach(i => $("wz" + i).hidden = i !== step);
   $("wzSteps").querySelectorAll(".s").forEach(s => s.classList.toggle("on", +s.dataset.s === step));
   $("wzSteps").style.visibility = step === 4 ? "hidden" : "visible";
+  if (step === 0) renderWz0();
 }
 
 $("wz1Next").onclick = () => { wzGo(2); wzMode(null); };

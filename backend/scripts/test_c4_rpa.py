@@ -19,8 +19,9 @@ from sqlalchemy import delete, select  # noqa: E402
 from scripts.testutil import Tally, register_tenant  # noqa: E402
 from app.core.db import SessionLocal  # noqa: E402
 from app.models import (  # noqa: E402
-    AgentRun, ChannelConnection, ChatSession, EmailCode, EscalationRule, Message,
-    MockOrder, MockProduct, Operator, RiskRule, Tenant, User,
+    AgentModelBinding, AgentRun, ChannelConnection, ChatSession, EmailCode,
+    EscalationRule, Message, MockOrder, MockProduct, ModelProvider, Operator,
+    RiskRule, Tenant, User,
 )
 from scripts.channel_worker import PROFILE_ROOT, run_cycle  # noqa: E402
 
@@ -47,6 +48,8 @@ def cleanup():
             db.execute(delete(MockOrder).where(MockOrder.tenant_id == tid))
             db.execute(delete(MockProduct).where(MockProduct.tenant_id == tid))
             db.execute(delete(User).where(User.tenant_id == tid))
+            db.execute(delete(AgentModelBinding).where(AgentModelBinding.tenant_id == tid))
+            db.execute(delete(ModelProvider).where(ModelProvider.tenant_id == tid))
             db.execute(delete(Operator).where(Operator.tenant_id == tid))
             db.delete(tn)
         db.execute(delete(EmailCode).where(EmailCode.email.like("%@testshop.dev")))
@@ -63,7 +66,7 @@ def main():
     client = httpx.Client(timeout=180)
 
     # ── 1. 商户 + 数据 + RPA 连接 ──
-    r, body = register_tenant(client, T_NAME, T_EMAIL)
+    r, body = register_tenant(client, T_NAME, T_EMAIL, with_ai=True)
     t.check("注册：201", r.status_code == 201)
     H = {"Authorization": f"Bearer {body['token']}"}
     SK = {"Authorization": f"Bearer {body['tenant']['api_secret']}"}

@@ -17,10 +17,12 @@ from sqlalchemy import delete, select  # noqa: E402
 
 from app.core.db import SessionLocal  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.models import (  # noqa: E402
-    AgentRun, ChatSession, KbDocument, KbDocumentVersion, Message, MockOrder,
-    MockProduct, MockShipment, Operator, Tenant, User,
+    AgentModelBinding, AgentRun, ChatSession, KbDocument, KbDocumentVersion, Message,
+    MockOrder, MockProduct, ModelProvider, MockShipment, Operator, Tenant, User,
 )
+from app.services import crypto  # noqa: E402
 
 BASE = "http://127.0.0.1:8000"
 DEMO_KEY = "pk_demo000000000000"
@@ -65,6 +67,16 @@ def setup_tenant_b():
         db.add(order)
         db.add(Operator(tenant_id=t.id, username="bowner", display_name="B店店主",
                         role="owner", password_hash=hash_password("bpass123")))
+        # BYOK：平台 .env 模型落为 B 店自有供应商（否则聊天被 409 闸门拦截）
+        prov = ModelProvider(tenant_id=t.id, name="deepseek",
+                             base_url=settings.llm_base_url,
+                             api_key=crypto.seal_api_key(settings.llm_api_key))
+        db.add(prov)
+        db.flush()
+        for agent in ("triage", "knowledge", "qc", "resolution", "insight"):
+            db.add(AgentModelBinding(tenant_id=t.id, agent_name=agent,
+                                     provider_id=prov.id, model_name=settings.llm_model,
+                                     temperature=0))
         db.commit()
         return str(t.id)
 
@@ -88,6 +100,8 @@ def cleanup_tenant_b():
         db.execute(delete(MockOrder).where(MockOrder.tenant_id == tid))
         db.execute(delete(MockProduct).where(MockProduct.tenant_id == tid))
         db.execute(delete(User).where(User.tenant_id == tid))
+        db.execute(delete(AgentModelBinding).where(AgentModelBinding.tenant_id == tid))
+        db.execute(delete(ModelProvider).where(ModelProvider.tenant_id == tid))
         db.execute(delete(Operator).where(Operator.tenant_id == tid))
         db.delete(t)
         db.commit()

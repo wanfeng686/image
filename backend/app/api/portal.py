@@ -18,8 +18,10 @@ from app.api.auth import get_current_operator
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_password, issue_token
-from app.models import ChatSession, EmailCode, MockOrder, MockProduct, Operator, Tenant, User
-from app.services import mailer, tenants as tenant_svc
+from app.models import (AgentModelBinding, ChatSession, EmailCode, MockOrder,
+                        MockProduct, ModelProvider, Operator, Tenant, User)
+from app.services import crypto, llm, mailer
+from app.services import tenants as tenant_svc
 from app.services.defaults import ensure_default_rules
 
 router = APIRouter(prefix="/api/portal", tags=["portal"])
@@ -219,6 +221,167 @@ def rotate_keys(body: RotateRequest, db: Session = Depends(get_db),
         t.api_secret = tenant_svc.generate_api_secret()
     db.commit()
     return {"api_secret": t.api_secret}
+
+
+# ---------- AI 模型与提示词（BYOK：商户自带模型，平台提供默认模板） ----------
+
+DEFAULT_PROVIDER_NAME = "default"
+
+
+def _default_provider(db: Session, t: Tenant) -> ModelProvider | None:
+    """门户"简单模式"操作的供应商：优先 default 命名的，否则任一已有
+    （兼容运营台 settings_api 创建的自定义命名供应商，如演示租户的 deepseek）。"""
+    row = db.scalar(select(ModelProvider).where(
+        ModelProvider.tenant_id == t.id,
+        ModelProvider.name == DEFAULT_PROVIDER_NAME))
+    if row is None:
+        row = db.scalar(select(ModelProvider).where(
+            ModelProvider.tenant_id == t.id).order_by(ModelProvider.id))
+    return row
+
+
+def _ai_config_dict(db: Session, t: Tenant) -> dict:
+    from app.services import prompts as prompts_svc
+
+    provider = _default_provider(db, t)
+    binding = db.scalar(select(AgentModelBinding).where(
+        AgentModelBinding.tenant_id == t.id,
+        AgentModelBinding.agent_name == "knowledge"))
+    override = (t.prompts or {}).get("knowledge_system")
+    slot = prompts_svc.SLOTS["knowledge_system"]
+    return {
+        "ready": llm.tenant_ready(db, t.id),
+        "provider": None if provider is None else {
+            "id": provider.id, "base_url": provider.base_url,
+            "api_key_masked": crypto.mask(crypto.plain_api_key(provider.api_key))
+            if crypto.plain_api_key(provider.api_key) else None,
+            "enabled": provider.enabled,
+            "last_test_status": provider.last_test_status,
+            "model": binding.model_name if binding else None,
+            "temperature": float(binding.temperature) if (
+                binding and binding.temperature is not None) else None,
+        },
+        "prompts": {"knowledge_system": {
+            "title": slot["title"], "desc": slot["desc"], "max_len": slot["max_len"],
+            "default": slot["default"],
+            "override": override if isinstance(override, str) and override.strip() else None,
+            "effective": prompts_svc.effective(db, t.id, "knowledge_system"),
+        }},
+    }
+
+
+@router.get("/ai-config")
+def get_ai_config(db: Session = Depends(get_db), op: Operator = Depends(get_current_operator)):
+    return _ai_config_dict(db, _get_tenant(db, op))
+
+
+class AiConfigRequest(BaseModel):
+    base_url: str | None = None
+    api_key: str | None = None       # 留空/不传 = 保留原值
+    model: str | None = None
+    temperature: float | None = None
+    knowledge_system: str | None = None  # 空串 = 清除覆盖回默认模板；None = 不动
+    disable: bool = False            # True = 停用自有供应商（回到未配置态）
+
+
+@router.put("/ai-config")
+def put_ai_config(body: AiConfigRequest, db: Session = Depends(get_db),
+                  op: Operator = Depends(get_current_operator)):
+    """一站式配置：upsert 默认供应商 + 五个 Agent 绑定 + 人设模板覆盖。"""
+    from app.services import prompts as prompts_svc
+
+    t = _get_tenant(db, op)
+    if body.disable:
+        p = _default_provider(db, t)
+        if p:
+            p.enabled = False
+        db.commit()
+        return _ai_config_dict(db, t)
+
+    if body.base_url is not None and not body.base_url.strip():
+        raise HTTPException(422, "base_url 不能为空")
+    if body.model is not None and not body.model.strip():
+        raise HTTPException(422, "model 不能为空")
+    if body.temperature is not None and not (0 <= body.temperature <= 2):
+        raise HTTPException(422, "temperature 需在 0-2 之间")
+
+    p = _default_provider(db, t)
+    if p is None:
+        # 首次配置：必须有完整三件套
+        if not (body.base_url and body.model and body.api_key):
+            raise HTTPException(422, "首次配置需同时提供 base_url、api_key 与 model")
+        p = ModelProvider(tenant_id=t.id, name=DEFAULT_PROVIDER_NAME,
+                          base_url=body.base_url.strip(),
+                          api_key=crypto.seal_api_key(body.api_key.strip()))
+        db.add(p)
+        db.flush()
+    else:
+        p.enabled = True
+        if body.base_url:
+            p.base_url = body.base_url.strip()
+        if body.api_key:
+            p.api_key = crypto.seal_api_key(body.api_key.strip())
+
+    if body.model:
+        temp = body.temperature if body.temperature is not None else 0.3
+        for agent in prompts_svc.AGENTS:  # 同一模型绑定全套 agent（向导式简单模式）
+            row = db.scalar(select(AgentModelBinding).where(
+                AgentModelBinding.tenant_id == t.id,
+                AgentModelBinding.agent_name == agent))
+            if row is None:
+                row = AgentModelBinding(tenant_id=t.id, agent_name=agent)
+                db.add(row)
+            row.provider_id = p.id
+            row.model_name = body.model.strip()
+            row.temperature = temp
+    elif body.temperature is not None:
+        # 只调温度：同步到既有绑定
+        for row in db.scalars(select(AgentModelBinding).where(
+                AgentModelBinding.tenant_id == t.id)):
+            row.temperature = body.temperature
+
+    if body.knowledge_system is not None:
+        try:
+            prompts_svc.set_override(db, t, "knowledge_system",
+                                     body.knowledge_system if body.knowledge_system.strip() else None)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+
+    db.commit()
+    return _ai_config_dict(db, t)
+
+
+class AiTestRequest(BaseModel):
+    model: str | None = None
+
+
+@router.post("/ai-config/test")
+def test_ai_config(body: AiTestRequest | None = None, db: Session = Depends(get_db),
+                   op: Operator = Depends(get_current_operator)):
+    """连通性测试：用已存（或指定）的模型发 1-token 探活。"""
+    from openai import OpenAI
+
+    t = _get_tenant(db, op)
+    p = _default_provider(db, t)
+    if p is None:
+        raise HTTPException(422, "尚未配置模型服务")
+    binding = db.scalar(select(AgentModelBinding).where(
+        AgentModelBinding.tenant_id == t.id,
+        AgentModelBinding.agent_name == "knowledge"))
+    model = (body.model if body and body.model else None) or (
+        binding.model_name if binding else None) or "deepseek-chat"
+    try:
+        client = OpenAI(api_key=crypto.plain_api_key(p.api_key) or "not-needed",
+                        base_url=p.base_url, timeout=15)
+        resp = client.chat.completions.create(
+            model=model, messages=[{"role": "user", "content": "hi"}], max_tokens=1)
+        p.last_test_status = "ok"
+        db.commit()
+        return {"ok": True, "model": model, "sample": (resp.choices[0].message.content or "")[:20]}
+    except Exception as exc:  # noqa: BLE001
+        p.last_test_status = "failed"
+        db.commit()
+        return {"ok": False, "model": model, "error": str(exc)[:150]}
 
 
 # ---------- 数据导入（门户 CSV 上传，与 /api/v1 JSON 推送共用处理内核） ----------

@@ -15,9 +15,10 @@ from sqlalchemy import delete, select  # noqa: E402
 
 from app.core.db import SessionLocal  # noqa: E402
 from app.models import (  # noqa: E402
-    AgentRun, ApprovalAction, ApprovalRequest, ChatSession, EmailCode, ExecutedAction,
-    KbDocument, KbDocumentVersion, Message, MockOrder, MockProduct, MockShipment,
-    Operator, RiskRule, EscalationRule, SessionNote, Tenant, User,
+    AgentModelBinding, AgentRun, ApprovalAction, ApprovalRequest, ChatSession,
+    EmailCode, ExecutedAction, KbDocument, KbDocumentVersion, Message, MockOrder,
+    MockProduct, ModelProvider, MockShipment, Operator, RiskRule, EscalationRule,
+    SessionNote, Tenant, User,
 )
 
 BASE = "http://127.0.0.1:8000"
@@ -57,6 +58,8 @@ def cleanup():
             db.execute(delete(MockOrder).where(MockOrder.tenant_id == tid))
             db.execute(delete(MockProduct).where(MockProduct.tenant_id == tid))
             db.execute(delete(User).where(User.tenant_id == tid))
+            db.execute(delete(AgentModelBinding).where(AgentModelBinding.tenant_id == tid))
+            db.execute(delete(ModelProvider).where(ModelProvider.tenant_id == tid))
             db.execute(delete(Operator).where(Operator.tenant_id == tid))
             db.delete(t)
         db.execute(delete(EmailCode).where(EmailCode.email.like("%@testshop.dev")))
@@ -68,7 +71,7 @@ def main():
     client = httpx.Client(timeout=180)
 
     # ── 1. 注册（邮箱+验证码） ──
-    r, body = register_tenant(client, C_NAME, "c-owner@testshop.dev")
+    r, body = register_tenant(client, C_NAME, "c-owner@testshop.dev", with_ai=True)
     check("注册：201 + 双密钥", r.status_code == 201
           and body["tenant"]["widget_key"].startswith("pk_")
           and body["tenant"]["api_secret"].startswith("sk_"), str(body)[:150])

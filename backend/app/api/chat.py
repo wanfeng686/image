@@ -19,7 +19,8 @@ from app.models import ChatSession, Message, User
 from app.schemas.message import MessageOut, MessagePage
 from app.schemas.session import SessionOut
 from app.services import escalation as escalation_svc
-from app.services import kb, llm, tenants as tenant_svc
+from app.services import kb, llm, prompts
+from app.services import tenants as tenant_svc
 from app.services.runs import Timer, log_run
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -115,9 +116,17 @@ def send_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session = 
     return _process_turn(db, session, body.content)
 
 
+def _require_ai_ready(db: Session, session: ChatSession) -> None:
+    """BYOK 闸门：商户未配置自有模型服务 → 拒绝处理（409）。"""
+    if not llm.tenant_ready(db, session.tenant_id):
+        raise HTTPException(status_code=409,
+                            detail="AI_MODEL_NOT_CONFIGURED：请商户先在门户「设置 → AI 模型与提示词」完成模型配置")
+
+
 def _process_turn(db: Session, session: ChatSession, content: str) -> list[Message]:
     """一轮对话的完整处理（升级前置闸 → 状态机 → 落库）。
     顾客端同步接口与开放 API（/api/v1）共用这一份内核。"""
+    _require_ai_ready(db, session)
     session_id = session.id
     history = _build_history(db, session_id)
     customer_msg = Message(session_id=session_id, role="customer", content=content)
@@ -216,6 +225,7 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
     session = db.get(ChatSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
+    _require_ai_ready(db, session)  # 流开始前拦截（生成器内抛 409 无法变成 HTTP 状态码）
 
     def generate():
         agent_id = uuid.uuid4()
@@ -271,7 +281,8 @@ def stream_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session 
                 if chunks:
                     pieces = []
                     try:
-                        for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks),
+                        sysp = prompts.effective(db, session.tenant_id, "knowledge_system")
+                        for token in llm.chat_stream(knowledge_agent.build_messages(body.content, chunks, system_prompt=sysp),
                                                       agent="knowledge", tenant_id=session.tenant_id):
                             pieces.append(token)
                             yield sse_event("message_delta", {"message_id": str(agent_id), "delta": token})

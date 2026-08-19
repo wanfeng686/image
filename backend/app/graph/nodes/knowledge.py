@@ -1,6 +1,6 @@
-"""知识库节点：检索 + 带引用生成。"""
+"""知识库节点：检索 + 带引用生成（人设模板支持租户覆盖）。"""
 from app.agent import knowledge as knowledge_agent
-from app.services import kb, llm
+from app.services import kb, llm, prompts
 from app.services.runs import Timer, log_run
 
 
@@ -15,7 +15,8 @@ def knowledge_node(state: dict) -> dict:
         answer = None
         if chunks:
             try:
-                msgs = knowledge_agent.build_messages(question, chunks)
+                sysp = prompts.effective(db, session.tenant_id, "knowledge_system")
+                msgs = knowledge_agent.build_messages(question, chunks, system_prompt=sysp)
                 # 质检打回重写：带上问题清单二次生成（W3 回环）
                 if state.get("qc_feedback"):
                     msgs = msgs + [{

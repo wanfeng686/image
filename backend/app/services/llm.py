@@ -1,8 +1,9 @@
-"""模型网关-lite（M12）：Agent 级模型绑定路由，未配置走 .env 默认供应商。
+"""模型网关-lite（M12）：Agent 级模型绑定路由（SaaS 化 BYOK）。
 
 统一 OpenAI 兼容协议（DESIGN 决策）：一个客户端协议接所有主流模型。
-SaaS 化：绑定表按租户解析（商户 BYOM）；未配置的租户回退平台默认模型，
-新注册商户零配置即可开聊。
+BYOK（C6）：商户必须自带模型供应商（model_providers，api_key AES-GCM 密文），
+未配置的租户由 tenant_ready 闸门在对话入口拦截；平台默认客户端仅作为
+"有供应商但绑定缺失"时的容错路由，不再是无配置租户的免费兜底。
 降级链/限流/成本记账为生产增强项，见 README Roadmap。
 """
 import uuid
@@ -14,6 +15,13 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 
 _default_client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
+
+
+def _provider_key(provider) -> str:
+    """供应商 api_key：密文解封；历史明文/解密失败按原值容错（不阻断）。"""
+    from app.services import crypto
+
+    return crypto.plain_api_key(provider.api_key) or "not-needed"
 
 
 def _resolve(agent: str | None, tenant_id: uuid.UUID | None = None) -> tuple[OpenAI, str, float | None]:
@@ -32,13 +40,34 @@ def _resolve(agent: str | None, tenant_id: uuid.UUID | None = None) -> tuple[Ope
                 ).first()
                 if row:
                     binding, provider = row
-                    client = OpenAI(api_key=provider.api_key or "not-needed",
+                    client = OpenAI(api_key=_provider_key(provider),
                                     base_url=provider.base_url)
                     temp = float(binding.temperature) if binding.temperature is not None else None
                     return client, binding.model_name, temp
         except Exception:  # noqa: BLE001 —— 配置层失败回退默认
             pass
     return _default_client, settings.llm_model, None
+
+
+def tenant_ready(db, tenant_id: uuid.UUID | None) -> bool:
+    """BYOK 闸门：租户存在启用的模型供应商即视为就绪。
+
+    keyless 供应商（本地 Ollama 等自有端点）也算就绪——流量走商户自己的
+    base_url，不构成对平台默认模型的蹭用。无租户上下文（平台内部任务）放行。
+    """
+    if tenant_id is None:
+        return True
+    try:
+        from app.models import ModelProvider
+
+        row = db.execute(
+            select(ModelProvider.id).where(
+                ModelProvider.tenant_id == tenant_id,
+                ModelProvider.enabled).limit(1)
+        ).first()
+        return row is not None
+    except Exception:  # noqa: BLE001 —— 查库失败宁可放行（不因闸门误杀）
+        return True
 
 
 def chat(messages: list[dict], model: str | None = None,

@@ -93,11 +93,20 @@ def format_agent_message(msg: Message) -> str:
 
 
 def process_channel_message(db: Session, conn: ChannelConnection,
-                            m: InboundMessage) -> OutboundReply:
-    """一条入站渠道消息的完整处理。调用方负责把返回的回复经适配器发回平台。"""
+                            m: InboundMessage) -> OutboundReply | None:
+    """一条入站渠道消息的完整处理。调用方负责把返回的回复经适配器发回平台。
+
+    商户未配置模型服务（BYOK 闸门）时返回 None：不回复、不落库、worker 不崩。
+    """
+    from app.services import llm as llm_svc
+
     tenant = db.get(Tenant, conn.tenant_id)
     if tenant is None:
         raise RuntimeError("渠道连接的租户不存在")
+    if not llm_svc.tenant_ready(db, conn.tenant_id):
+        conn.last_error = "AI_MODEL_NOT_CONFIGURED：商户未配置模型服务，消息被跳过"
+        db.commit()
+        return None
     user = _user_for(db, tenant, m)
     session = _session_for(db, tenant, m, user)
 
