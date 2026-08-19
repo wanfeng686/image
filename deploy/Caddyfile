@@ -1,0 +1,30 @@
+# SmartSupport 生产部署反向代理：Caddy 自动 HTTPS
+# 把 your-domain.com 替换成你的真实域名；DNS A 记录指到服务器公网 IP。
+your-domain.com {
+	encode gzip
+
+	# 后端 API + 全部静态页（含 /embed.js、/widget/）+ SSE 长连接
+	reverse_proxy backend:8000 {
+		# SSE：关闭缓冲，flush_interval 置 -1 让事件即时到达
+		flush_interval -1
+	}
+
+	# 安全响应头（embed.js 需要在商户站执行，不动全局 CSP；
+	# 这里只加基础防护头）
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# 访问与错误日志（docker logs caddy 也可看）
+	log {
+		output stdout
+	}
+}
+
+# 本地试跑（无域名）：访问 http://localhost
+# localhost {
+# 	reverse_proxy backend:8000
+# }

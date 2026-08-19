@@ -36,8 +36,11 @@ def verify_password(password: str, stored: str) -> bool:
 # ---------- 运营台令牌（HMAC 签名的轻量 token，载荷明文可见但不可伪造） ----------
 
 def _secret() -> bytes:
-    # 复用 LLM key 做签名密钥来源之一（演示项目；生产应独立 SECRET_KEY）
-    return (settings.llm_api_key or "dev-secret").encode()
+    """token 签名密钥：独立的 SECRET_KEY（S4 安全整改：不再复用 LLM key）。
+    未配置时回退组合值——仅本地演示，生产必须显式设置。"""
+    if settings.secret_key:
+        return settings.secret_key.encode()
+    return (settings.llm_api_key + "::ss-fallback").encode()
 
 
 def issue_token(operator_id: str, ttl_seconds: int = 12 * 3600) -> str:

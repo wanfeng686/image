@@ -1,0 +1,67 @@
+# SmartSupport 生产编排：Caddy（自动 HTTPS）+ backend + PostgreSQL
+# 用法见 docs/DEPLOY.md。首次启动前先准备 backend/.env（可从 .env.example 复制）。
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: smart-support-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data          # TLS 证书存储（务必持久化，否则每次重启重新签发）
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [ss-net]
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../deploy/Dockerfile.backend
+    container_name: smart-support-backend
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      # 覆盖 .env 里的本地地址：容器网络内直连 postgres
+      DATABASE_URL: postgresql+psycopg://smartbot:${POSTGRES_PASSWORD:-smartbot_dev}@postgres:5432/smart_support
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ss-net]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: smart-support-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smartbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartbot_dev}
+      POSTGRES_DB: smart_support
+    volumes:
+      - pg_data:/var/lib/postgresql/data   # 业务数据真相之源，必须持久化
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartbot -d smart_support"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [ss-net]
+
+volumes:
+  pg_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  ss-net:
