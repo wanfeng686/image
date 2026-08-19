@@ -1,6 +1,32 @@
 INFO:     Will watch for changes in these directories: ['D:\\test\\smart-support\\backend']
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [21248] using WatchFiles
-INFO:     Started server process [27212]
+INFO:     Started reloader process [24808] using WatchFiles
+INFO:     Started server process [23564]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
+INFO:     127.0.0.1:53021 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53025 - "GET /embed.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53026 - "GET /widget/?key=pk_demo000000000000&embed=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53027 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53028 - "GET /portal.html HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'scripts\test_s3.py'. Reloading...
+ INFO:     127.0.0.1:58648 - "GET /embed.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58650 - "GET /widget/?key=pk_demo000000000000&embed=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58652 - "GET /test-merchant.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58654 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58656 - "GET /demo.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58658 - "GET /api/widget/boot?key=pk_demo000000000000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58661 - "GET /api/widget/boot?key=pk_nope HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58694 - "POST /api/portal/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:58699 - "PUT /api/portal/origins HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58701 - "POST /api/widget/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:58703 - "POST /api/widget/sessions HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:58705 - "POST /api/widget/sessions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:58707 - "POST /api/chat/sessions/761ba23c-cc62-4c72-87e6-de413fb040ce/messages/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60130 - "GET /embed.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60132 - "GET /widget/?key=pk_demo000000000000&embed=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60134 - "GET /test-merchant.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60136 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60138 - "GET /demo.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60140 - "GET /api/widget/boot?key=pk_demo000000000000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60142 - "GET /api/widget/boot?key=pk_nope HTTP/1.1" 401 Unauthorized

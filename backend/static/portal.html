@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商户门户 · SmartSupport</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --brand: #4F46E5; --ok: #10B981; --warn: #F59E0B; --bad: #EF4444; --line: #e2e8f0; --muted: #64748b; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f1f5f9; color: #1e293b; font-size: 14px; }
+  a { text-decoration: none; color: inherit; }
+  button { font-family: inherit; cursor: pointer; }
+  input, textarea, select { font-family: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; width: 100%; background: #fff; }
+  input:focus, textarea:focus { outline: 2px solid #c7d2fe; border-color: var(--brand); }
+  .btn { padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; font-weight: 600; font-size: 13.5px; }
+  .btn-p { background: var(--brand); color: #fff; } .btn-p:hover { background: #4338CA; }
+  .btn-o { background: #fff; border-color: #cbd5e1; color: #334155; } .btn-o:hover { border-color: var(--brand); color: var(--brand); }
+  .btn-danger { background: #fff; border-color: #fecaca; color: var(--bad); }
+  .btn-sm { padding: 5px 12px; font-size: 12.5px; }
+
+  /* 登录/注册覆盖层 */
+  #auth { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #eef2ff, #f8fafc); }
+  #auth[hidden] { display: none; }
+  .auth-card { background: #fff; border-radius: 16px; box-shadow: 0 10px 40px rgba(15,23,42,.10); width: 380px; padding: 32px; }
+  .auth-card h1 { font-size: 20px; margin-bottom: 4px; }
+  .auth-card h1 span { color: var(--brand); }
+  .auth-card p.hint { color: var(--muted); margin-bottom: 20px; font-size: 13px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+  .auth-err { color: var(--bad); font-size: 12.5px; min-height: 18px; margin: 4px 0 8px; }
+  .auth-switch { margin-top: 14px; font-size: 13px; color: var(--muted); text-align: center; }
+  .auth-switch a { color: var(--brand); font-weight: 600; cursor: pointer; }
+  .auth-foot { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--line); font-size: 12px; color: #94a3b8; line-height: 1.7; }
+
+  /* 应用框架 */
+  #app[hidden] { display: none; }
+  header.topbar { position: sticky; top: 0; z-index: 20; background: #fff; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 18px; padding: 0 22px; height: 54px; }
+  .topbar .logo { font-weight: 800; color: var(--brand); font-size: 16px; }
+  .tabs { display: flex; gap: 4px; height: 100%; }
+  .tabs button { border: none; background: none; padding: 0 14px; font-size: 13.5px; color: var(--muted); border-bottom: 2.5px solid transparent; height: 100%; }
+  .tabs button.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 700; }
+  .topbar .right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+
+  main { max-width: 1080px; margin: 24px auto; padding: 0 20px 60px; }
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+  .panel h2 { font-size: 16px; margin-bottom: 4px; }
+  .panel p.desc { color: var(--muted); font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .kv { display: flex; align-items: center; gap: 10px; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .kv .k { width: 88px; color: var(--muted); font-size: 12.5px; flex-shrink: 0; }
+  .kv code { font-family: Consolas, monospace; font-size: 12.5px; word-break: break-all; flex: 1; }
+  .stats { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 130px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .stat b { display: block; font-size: 26px; color: #0f172a; }
+  .stat span { color: var(--muted); font-size: 12.5px; }
+  .stat .bar { height: 4px; border-radius: 2px; background: #e2e8f0; margin-top: 10px; }
+  pre.code { background: #0f172a; color: #a5b4fc; border-radius: 10px; padding: 14px; font-size: 12.5px; font-family: Consolas, monospace; overflow-x: auto; line-height: 1.7; margin: 10px 0; }
+  .copy-row { display: flex; gap: 8px; align-items: center; }
+  .toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .25s; z-index: 99; }
+  .toast.show { opacity: .95; }
+  .chip { display: inline-block; background: #eef2ff; color: var(--brand); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; margin: 0 6px 6px 0; }
+  .origin-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .origin-item code { background: #f1f5f9; border-radius: 6px; padding: 5px 10px; flex: 1; font-size: 12.5px; }
+  .brand-preview { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .brand-preview .bubble { border-radius: 12px 12px 12px 2px; padding: 10px 14px; color: #fff; font-size: 13px; display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .note-ok { color: var(--ok); } .note-warn { color: var(--warn); }
+  .dropzone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 26px; text-align: center; color: var(--muted); background: #f8fafc; transition: .2s; }
+  .dropzone.drag { border-color: var(--brand); background: #eef2ff; }
+  .import-result { margin-top: 12px; font-size: 13px; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ 登录 / 注册 ═══════════ -->
+<div id="auth">
+  <div class="auth-card">
+    <h1><span>Smart</span>Support 商户门户</h1>
+    <p class="hint" id="authHint">登录您的商户账号，管理 AI 客服</p>
+
+    <div id="loginBox">
+      <div class="field"><label>用户名</label><input id="li_user" placeholder="如 shop"></div>
+      <div class="field"><label>密码</label><input id="li_pass" type="password"></div>
+      <div class="auth-err" id="li_err"></div>
+      <button class="btn btn-p" style="width:100%" id="li_btn">登 录</button>
+      <div class="auth-switch">还没有商户账号？<a id="gotoReg">免费注册</a></div>
+    </div>
+
+    <div id="regBox" hidden>
+      <div class="field"><label>商户/店铺名称</label><input id="rg_tenant" placeholder="如 星空文创旗舰店"></div>
+      <div class="field"><label>管理员用户名</label><input id="rg_user" placeholder="字母数字下划线，3-64 位"></div>
+      <div class="field"><label>密码</label><input id="rg_pass" type="password" placeholder="至少 6 位"></div>
+      <div class="auth-err" id="rg_err"></div>
+      <button class="btn btn-p" style="width:100%" id="rg_btn">创建商户，开始接入</button>
+      <div class="auth-switch">已有账号？<a id="gotoLogin">直接登录</a></div>
+    </div>
+
+    <div class="auth-foot">
+      想先看看效果？<a href="/demo.html" style="color:var(--brand)">体验演示商城</a> ·
+      <a href="/" style="color:var(--brand)">返回首页</a><br>
+      演示商户账号：shop / shop123
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 应用 ═══════════ -->
+<div id="app" hidden>
+  <header class="topbar">
+    <span class="logo">SmartSupport</span>
+    <nav class="tabs">
+      <button data-tab="setup" class="on">🔌 接入</button>
+      <button data-tab="data">📦 数据</button>
+      <button data-tab="ops">🎛️ 运营</button>
+    </nav>
+    <div class="right">
+      <span id="whoami"></span>
+      <span class="avatar" id="avatar">店</span>
+      <button class="btn btn-o btn-sm" id="logoutBtn">退出</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ─── 接入 Tab ─── -->
+    <section id="tab-setup">
+      <div class="stats">
+        <div class="stat"><b id="st_sessions">0</b><span>累计会话</span><div class="bar"></div></div>
+        <div class="stat"><b id="st_products">0</b><span>商品数</span><div class="bar"></div></div>
+        <div class="stat"><b id="st_orders">0</b><span>订单数</span><div class="bar"></div></div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h2>① 嵌入你的网站</h2>
+          <p class="desc">把这段代码贴到每个页面 <code>&lt;/body&gt;</code> 前（或你的网站模板里），右下角就会出现客服浮窗。</p>
+          <pre class="code" id="embedCode">&lt;script …&gt;</pre>
+          <div class="copy-row"><button class="btn btn-p btn-sm" onclick="copyEmbed()">📋 复制嵌入代码</button>
+            <a class="btn btn-o btn-sm" href="/test-merchant.html" target="_blank">👁️ 看嵌入效果示例</a></div>
+          <div class="kv"><span class="k">Widget 密钥</span><code id="pk"></code>
+            <button class="btn btn-o btn-sm" onclick="copyText(document.getElementById('pk').textContent)">复制</button></div>
+          <div class="kv"><span class="k">API 密钥</span><code id="sk"></code>
+            <button class="btn btn-o btn-sm" onclick="copyText(document.getElementById('sk').textContent)">复制</button></div>
+          <p class="muted" style="margin-top:8px">⚠️ sk_ 是服务端密钥，只能用在你的后端，不要放进网页/APP 前端。</p>
+          <button class="btn btn-danger btn-sm" style="margin-top:10px" onclick="rotateKeys()">🔄 轮换密钥（旧密钥立即失效）</button>
+        </div>
+
+        <div class="panel">
+          <h2>② 品牌化你的客服</h2>
+          <p class="desc">顾客在浮窗里看到的标题、欢迎语和主题色。</p>
+          <div class="field"><label>客服标题</label><input id="b_title" maxlength="64"></div>
+          <div class="field"><label>欢迎语</label><textarea id="b_welcome" rows="2" maxlength="200"></textarea></div>
+          <div class="field"><label>主题色</label><input id="b_color" type="color" style="width:64px;padding:2px;height:38px"></div>
+          <button class="btn btn-p btn-sm" onclick="saveBrand()">💾 保存品牌设置</button>
+          <div style="margin-top:16px">
+            <div class="muted" style="margin-bottom:8px">实时预览：</div>
+            <div class="brand-preview">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                <span class="avatar" id="pv_avatar" style="background:#4F46E5">🤖</span>
+                <b id="pv_title" style="font-size:13.5px">客服</b>
+              </div>
+              <div class="bubble" id="pv_welcome" style="background:#4F46E5">您好</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>③ 嵌入域名白名单（Origin）</h2>
+        <p class="desc">配置后只有这些域名能加载你的客服浮窗（协议+域名+端口，如 <code>https://www.example.com</code>）。
+        留空 = 宽松模式（本地联调阶段建议留空，上线前务必配置）。</p>
+        <div id="originList"></div>
+        <div class="origin-item">
+          <input id="newOrigin" placeholder="https://www.your-shop.com">
+          <button class="btn btn-p btn-sm" onclick="addOrigin()">＋ 添加</button>
+        </div>
+        <button class="btn btn-o btn-sm" onclick="saveOrigins()">💾 保存白名单</button>
+      </div>
+
+      <div class="panel">
+        <h2>④ 后端 API 对接（可选）</h2>
+        <p class="desc">你的平台/APP 后端可以用 sk_ 密钥直接调用开放 API：推送数据、创建会话、发消息拿回复。</p>
+        <pre class="code" id="apiDoc"># 推送商品（upsert by sku）
+curl -X POST {ORIGIN}/api/v1/products \
+  -H "Authorization: Bearer sk_…" -H "Content-Type: application/json" \
+  -d '{"items":[{"sku":"P-001","name":"咖啡豆","price":128,"category":"食品"}]}'
+
+# 推送订单（自动按 user_external_id 绑定/创建顾客）
+curl -X POST {ORIGIN}/api/v1/orders \
+  -H "Authorization: Bearer sk_…" -H "Content-Type: application/json" \
+  -d '{"items":[{"order_no":"SO-9","sku":"P-001","user_external_id":"member-42","amount":128,"status":"paid"}]}'
+
+# API 会话：发一条消息，拿完整 AI 回复（非流式）
+curl -X POST {ORIGIN}/api/v1/sessions -H "Authorization: Bearer sk_…" -d '{}'
+curl -X POST {ORIGIN}/api/v1/sessions/{sid}/messages -H "Authorization: Bearer sk_…" \
+  -d '{"content":"查一下订单 SO-9"}'</pre>
+        <a class="btn btn-o btn-sm" href="/docs" target="_blank">完整 API 文档（Swagger）</a>
+      </div>
+    </section>
+
+    <!-- ─── 数据 Tab ─── -->
+    <section id="tab-data" hidden>
+      <div class="panel">
+        <h2>CSV 批量导入</h2>
+        <p class="desc">上传商品或订单 CSV。<b>文件名包含 "products" 或 "orders"</b> 决定导入类型（如 shop-products.csv）。
+        已存在的 sku / order_no 会被更新（upsert），不会重复创建。</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div>
+            <div class="muted" style="margin-bottom:6px">products 列：sku, name, price, category</div>
+            <pre class="code">sku,name,price,category
+P-001,手冲咖啡豆,128,食品
+P-002,陶瓷马克杯,39,家居</pre>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:6px">orders 列：order_no, sku, user_external_id, amount, status</div>
+            <pre class="code">order_no,sku,user_external_id,amount,status
+SO-9,P-001,member-42,128,paid
+SO-10,P-002,member-42,39,shipped</pre>
+          </div>
+        </div>
+        <div class="dropzone" id="dropzone" style="margin-top:16px">
+          📄 拖拽 CSV 到这里，或 <label style="color:var(--brand);cursor:pointer;text-decoration:underline">选择文件<input type="file" id="fileInput" accept=".csv" hidden></label>
+        </div>
+        <div class="import-result" id="importResult"></div>
+      </div>
+      <div class="panel">
+        <h2>为什么需要商品与订单数据？</h2>
+        <p class="desc" style="margin-bottom:0">
+          AI 客服的两大硬能力都建立在数据上：<b>查订单</b>（顾客问"我的快递到哪了"，订单+物流卡片直接回答）、
+          <b>办退款</b>（基于订单金额做风险评分与审批路由）。数据只增不改真相：CSV 用来批量初始化，
+          API 推送用来实时同步。所有数据仅在你的租户内可见。
+        </p>
+      </div>
+    </section>
+
+    <!-- ─── 运营 Tab ─── -->
+    <section id="tab-ops" hidden>
+      <div class="panel" style="text-align:center;padding:46px 22px">
+        <div style="font-size:40px">🎛️</div>
+        <h2 style="margin:10px 0 6px">进入运营工作台</h2>
+        <p class="desc" style="max-width:480px;margin:0 auto 18px">
+          会话监控与 Agent 轨迹、退款审批队列（风险评分/双签）、知识库管理与缺口闭环、
+          每日洞察日报、模型供应商配置——全部只展示你商户自己的数据。
+        </p>
+        <a class="btn btn-p" href="/console.html" target="_blank">打开运营台 →</a>
+        <p class="muted" style="margin-top:12px">运营台使用同一商户账号登录（当前登录态可直接进入）</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ORIGIN = location.origin;
+let TOKEN = localStorage.getItem("ss_token") || "";
+let TENANT = null;
+
+const $ = id => document.getElementById(id);
+
+function toast(msg, ok = true) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.style.background = ok ? "#0f172a" : "#b91c1c";
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(ORIGIN + path, {
+    ...opts,
+    headers: { "Content-Type": "application/json",
+               ...(TOKEN ? { "Authorization": "Bearer " + TOKEN } : {}), ...(opts.headers || {}) },
+  });
+  if (r.status === 401) { logout(false); throw new Error("登录已过期，请重新登录"); }
+  return r;
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast("已复制到剪贴板"));
+}
+function copyEmbed() { copyText($("embedCode").textContent); }
+
+/* ───── 认证 ───── */
+function showAuth(mode) {
+  $("auth").hidden = false; $("app").hidden = true;
+  $("loginBox").hidden = mode !== "login";
+  $("regBox").hidden = mode !== "register";
+  $("authHint").textContent = mode === "register" ? "30 秒注册，立刻拿到接入密钥" : "登录您的商户账号，管理 AI 客服";
+}
+function logout(callApi = true) {
+  TOKEN = ""; localStorage.removeItem("ss_token");
+  showAuth("login");
+}
+
+$("gotoReg").onclick = () => showAuth("register");
+$("gotoLogin").onclick = () => showAuth("login");
+$("li_btn").onclick = async () => {
+  $("li_err").textContent = "";
+  const r = await api("/api/auth/login", { method: "POST",
+    body: JSON.stringify({ username: $("li_user").value.trim(), password: $("li_pass").value }) });
+  const b = await r.json();
+  if (!r.ok) { $("li_err").textContent = (b.detail && b.detail.message) || "用户名或密码错误"; return; }
+  if (b.operator.tenant_id === null) { $("li_err").textContent = "这是平台账号，请用商户账号登录门户"; return; }
+  TOKEN = b.token; localStorage.setItem("ss_token", TOKEN);
+  enter();
+};
+$("li_pass").addEventListener("keydown", e => { if (e.key === "Enter") $("li_btn").click(); });
+
+$("rg_btn").onclick = async () => {
+  $("rg_err").textContent = "";
+  const r = await api("/api/portal/register", { method: "POST", body: JSON.stringify({
+    tenant_name: $("rg_tenant").value.trim(),
+    username: $("rg_user").value.trim(),
+    password: $("rg_pass").value,
+  }) });
+  const b = await r.json();
+  if (!r.ok) { $("rg_err").textContent = typeof b.detail === "string" ? b.detail : "注册失败，请检查填写"; return; }
+  TOKEN = b.token; localStorage.setItem("ss_token", TOKEN);
+  enter();
+  toast("🎉 商户创建成功，密钥已生成（见「接入」页）");
+};
+
+/* ───── 主界面 ───── */
+async function enter() {
+  const r = await api("/api/portal/me");
+  if (!r.ok) { logout(false); return; }
+  TENANT = await r.json();
+  $("auth").hidden = true; $("app").hidden = false;
+  $("whoami").textContent = TENANT.name;
+  render();
+}
+
+function render() {
+  const t = TENANT;
+  $("st_sessions").textContent = t.stats.sessions;
+  $("st_products").textContent = t.stats.products;
+  $("st_orders").textContent = t.stats.orders;
+  $("embedCode").textContent = t.embed_code.replace("{ORIGIN}", ORIGIN);
+  $("pk").textContent = t.widget_key;
+  $("sk").textContent = t.api_secret;
+  // 品牌
+  $("b_title").value = t.brand.title;
+  $("b_welcome").value = t.brand.welcome;
+  $("b_color").value = /^#[0-9a-f]{6}$/i.test(t.brand.theme_color) ? t.brand.theme_color : "#4F46E5";
+  preview();
+  // 白名单
+  renderOrigins(t.allowed_origins || []);
+  // API 文档
+  $("apiDoc").textContent = $("apiDoc").textContent.replaceAll("{ORIGIN}", ORIGIN)
+    .replace("sk_…", t.api_secret.slice(0, 7) + "…");
+}
+
+function preview() {
+  $("pv_title").textContent = $("b_title").value || "客服";
+  $("pv_welcome").textContent = $("b_welcome").value || "您好";
+  const c = $("b_color").value;
+  $("pv_welcome").style.background = c;
+  $("pv_avatar").style.background = c;
+}
+$("b_title").oninput = preview; $("b_welcome").oninput = preview; $("b_color").oninput = preview;
+
+async function saveBrand() {
+  const r = await api("/api/portal/brand", { method: "PATCH", body: JSON.stringify({
+    title: $("b_title").value, welcome: $("b_welcome").value, theme_color: $("b_color").value }) });
+  if (r.ok) toast("品牌设置已保存 ✅"); else toast("保存失败", false);
+}
+
+let origins = [];
+function renderOrigins(list) {
+  origins = [...list];
+  const box = $("originList");
+  box.innerHTML = origins.length ? "" : '<div class="muted" style="margin-bottom:8px">（空 = 宽松模式，任意域名可嵌入）</div>';
+  origins.forEach((o, i) => {
+    const div = document.createElement("div");
+    div.className = "origin-item";
+    div.innerHTML = `<code></code><button class="btn btn-danger btn-sm">移除</button>`;
+    div.querySelector("code").textContent = o;
+    div.querySelector("button").onclick = () => { origins.splice(i, 1); renderOrigins(origins); };
+    box.appendChild(div);
+  });
+}
+function addOrigin() {
+  const v = $("newOrigin").value.trim().replace(/\/+$/, "");
+  if (!v) return;
+  if (!/^https?:\/\/.+/.test(v)) { toast("格式：https://域名[:端口]", false); return; }
+  if (!origins.includes(v)) origins.push(v);
+  $("newOrigin").value = "";
+  renderOrigins(origins);
+}
+async function saveOrigins() {
+  const r = await api("/api/portal/origins", { method: "PUT", body: JSON.stringify({ origins }) });
+  if (r.ok) toast("白名单已保存 ✅"); else toast("保存失败", false);
+}
+
+async function rotateKeys() {
+  if (!confirm("轮换后旧密钥立即失效：已嵌入的网站需更新代码，商户后端需换新 sk_。确定继续？")) return;
+  const r = await api("/api/portal/keys/rotate", { method: "POST", body: JSON.stringify({ which: "both" }) });
+  if (!r.ok) { toast("轮换失败", false); return; }
+  await enter();
+  toast("密钥已轮换，请更新嵌入代码与后端配置 🔑");
+}
+
+/* ───── CSV 导入 ───── */
+const dz = $("dropzone");
+dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
+dz.addEventListener("drop", e => { e.preventDefault(); dz.classList.remove("drag"); upload(e.dataTransfer.files[0]); });
+$("fileInput").onchange = e => upload(e.target.files[0]);
+
+async function upload(file) {
+  if (!file) return;
+  if (!/\.csv$/i.test(file.name)) { toast("请上传 .csv 文件", false); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(ORIGIN + "/api/portal/import", {
+    method: "POST", headers: { "Authorization": "Bearer " + TOKEN }, body: fd });
+  const b = await r.json();
+  const box = $("importResult");
+  if (!r.ok) { box.innerHTML = `<span style="color:var(--bad)">❌ ${b.detail || "导入失败"}</span>`; return; }
+  const icon = b.type === "products" ? "🛍️" : "📦";
+  box.innerHTML = `<span class="note-ok">✅ ${icon} ${b.type} 导入完成</span>：
+    共 ${b.rows} 行 · 新建 <b>${b.created}</b> · 更新 <b>${b.updated}</b>${b.skipped ? ` · <span class="note-warn">跳过 ${b.skipped}（缺少 sku/会员ID 等必填列）</span>` : ""}`;
+  enter();
+}
+
+/* ───── Tabs ───── */
+document.querySelectorAll(".tabs button").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b === btn));
+    ["setup", "data", "ops"].forEach(t => $("tab-" + t).hidden = t !== btn.dataset.tab);
+  };
+});
+
+$("logoutBtn").onclick = () => logout();
+
+/* ───── 启动 ───── */
+if (TOKEN) enter();
+else showAuth(location.hash === "#register" ? "register" : "login");
+</script>
+</body>
+</html>

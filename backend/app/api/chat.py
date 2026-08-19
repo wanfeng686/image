@@ -112,15 +112,21 @@ def send_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session = 
     session = db.get(ChatSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
+    return _process_turn(db, session, body.content)
 
+
+def _process_turn(db: Session, session: ChatSession, content: str) -> list[Message]:
+    """一轮对话的完整处理（升级前置闸 → 状态机 → 落库）。
+    顾客端同步接口与开放 API（/api/v1）共用这一份内核。"""
+    session_id = session.id
     history = _build_history(db, session_id)
-    customer_msg = Message(session_id=session_id, role="customer", content=body.content)
+    customer_msg = Message(session_id=session_id, role="customer", content=content)
     db.add(customer_msg)
     db.flush()
 
     # 升级硬规则前置闸（W3）：命中直接转人工，不进状态机
     user = db.get(User, session.user_id)
-    hit, reason = escalation_svc.evaluate(db, session, user, body.content)
+    hit, reason = escalation_svc.evaluate(db, session, user, content)
     if hit:
         session.status = "escalated"
         session.escalated_reason = reason
@@ -130,14 +136,14 @@ def send_message(session_id: uuid.UUID, body: SendMessageRequest, db: Session = 
         session.last_message_at = datetime.now(timezone.utc)
         session.steps_used = (session.steps_used or 0) + 1
         log_run(db, session.id, "supervisor", "escalation",
-                input_summary={"question": body.content[:200]},
+                input_summary={"question": content[:200]},
                 output={"escalated": True, "reason": reason}, message_id=customer_msg.id)
         db.commit()
         db.refresh(customer_msg)
         db.refresh(agent_msg)
         return [customer_msg, agent_msg]
 
-    result = supervisor.invoke(_base_state(db, session, body.content, history, customer_msg.id))
+    result = supervisor.invoke(_base_state(db, session, content, history, customer_msg.id))
 
     intent = result.get("intent")
     card = result.get("card")

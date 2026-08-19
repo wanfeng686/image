@@ -3,247 +3,104 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SmartSupport 智能客服</title>
+<title>SmartSupport · AI 客服即服务平台</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-    background: #eef1f5; height: 100vh; display: flex; align-items: center; justify-content: center;
-  }
-  .widget {
-    width: 440px; height: 660px; max-height: 94vh; background: #fff;
-    border-radius: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, .12);
-    display: flex; flex-direction: column; overflow: hidden;
-  }
-  .header { padding: 14px 20px; background: linear-gradient(135deg, #4f6ef2, #6a5af9); color: #fff;
-            display: flex; justify-content: space-between; align-items: center; }
-  .header h1 { font-size: 16px; font-weight: 600; }
-  .header p { font-size: 11px; opacity: .8; margin-top: 2px; }
-  .header button {
-    border: 1px solid rgba(255,255,255,.5); background: transparent; color: #fff;
-    border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
-  }
-  .header button:hover { background: rgba(255,255,255,.15); }
-  .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-  .bubble {
-    max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 14px;
-    line-height: 1.65; white-space: pre-wrap; word-break: break-word;
-  }
-  .customer { align-self: flex-end; background: #4f6ef2; color: #fff; border-bottom-right-radius: 4px; }
-  .agent { align-self: flex-start; background: #f2f3f7; color: #222; border-bottom-left-radius: 4px; }
-  .status {
-    align-self: flex-start; font-size: 12px; color: #888; padding: 2px 6px;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4f6ef2; animation: pulse 1s infinite; }
-  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
-  .steps { align-self: flex-start; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; font-size: 11px; }
-  .steps span { background: #f2f3f7; color: #98a; border-radius: 4px; padding: 1px 6px; }
-  .steps i { font-style: normal; color: #c3c8d4; }
-  /* 数据卡片 */
-  .card {
-    align-self: flex-start; width: 82%; border: 1px solid #e3e6ee; border-radius: 12px;
-    overflow: hidden; font-size: 13px; background: #fff;
-  }
-  .card .card-head {
-    padding: 8px 12px; font-size: 12px; color: #fff; display: flex; justify-content: space-between;
-  }
-  .card.order .card-head { background: #3b82f6; }
-  .card.refund .card-head { background: #f59e0b; }
-  .card .card-body { padding: 10px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
-  .card .card-body b { color: #444; font-weight: 500; }
-  .card .full { grid-column: 1 / -1; }
-  /* 审批横幅 */
-  .banner {
-    align-self: stretch; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e;
-    border-radius: 10px; padding: 8px 12px; font-size: 12.5px; text-align: center;
-  }
-  .inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #eceef2; }
-  .inputbar input {
-    flex: 1; border: 1px solid #dfe3ea; border-radius: 10px; padding: 10px 12px;
-    font-size: 14px; outline: none;
-  }
-  .inputbar input:focus { border-color: #4f6ef2; }
-  .inputbar button {
-    border: none; background: #4f6ef2; color: #fff; border-radius: 10px;
-    padding: 0 18px; font-size: 14px; cursor: pointer;
-  }
-  .inputbar button:disabled { background: #b9c3f7; cursor: not-allowed; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1e293b; background: #f8fafc; }
+  a { text-decoration: none; color: inherit; }
+  .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 6vw; background: #fff; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 10; }
+  .logo { font-size: 20px; font-weight: 800; color: #4F46E5; }
+  .logo span { color: #0f172a; }
+  .nav-actions a { margin-left: 16px; font-size: 14px; }
+  .btn { display: inline-block; padding: 9px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+  .btn-primary { background: #4F46E5; color: #fff; }
+  .btn-primary:hover { background: #4338CA; }
+  .btn-ghost { color: #4F46E5; }
+  .hero { text-align: center; padding: 72px 6vw 48px; background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%); }
+  .hero h1 { font-size: clamp(28px, 4.5vw, 44px); font-weight: 800; line-height: 1.25; }
+  .hero h1 em { font-style: normal; color: #4F46E5; }
+  .hero p.sub { margin: 18px auto 0; max-width: 640px; color: #475569; font-size: 17px; line-height: 1.7; }
+  .hero-ctas { margin-top: 32px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .hero-ctas .btn { padding: 13px 30px; font-size: 15px; border-radius: 10px; }
+  .steps { display: flex; gap: 20px; justify-content: center; margin: 56px auto 0; max-width: 880px; flex-wrap: wrap; }
+  .step { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px 24px; width: 260px; text-align: left; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
+  .step .n { display: inline-flex; width: 30px; height: 30px; border-radius: 8px; background: #eef2ff; color: #4F46E5; font-weight: 800; align-items: center; justify-content: center; font-size: 14px; }
+  .step h3 { margin: 12px 0 6px; font-size: 16px; }
+  .step p { color: #64748b; font-size: 13.5px; line-height: 1.6; }
+  .step code { display: block; margin-top: 10px; background: #0f172a; color: #a5b4fc; border-radius: 8px; padding: 9px 11px; font-size: 11.5px; font-family: Consolas, monospace; overflow-x: auto; white-space: nowrap; }
+  section.features { max-width: 1080px; margin: 64px auto 0; padding: 0 6vw 72px; }
+  section.features h2 { text-align: center; font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+  section.features p.center { text-align: center; color: #64748b; margin-bottom: 36px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; }
+  .card .icon { font-size: 26px; }
+  .card h3 { margin: 12px 0 8px; font-size: 16.5px; }
+  .card p { color: #64748b; font-size: 13.5px; line-height: 1.65; }
+  .demo-band { background: #0f172a; color: #e2e8f0; padding: 56px 6vw; text-align: center; }
+  .demo-band h2 { font-size: 24px; color: #fff; }
+  .demo-band p { margin: 12px auto 28px; color: #94a3b8; max-width: 560px; line-height: 1.7; font-size: 14.5px; }
+  .demo-band .row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .demo-band .btn-outline { border: 1px solid #6366f1; color: #c7d2fe; }
+  .demo-band .btn-outline:hover { background: #4F46E5; color: #fff; }
+  footer { padding: 28px 6vw; text-align: center; color: #94a3b8; font-size: 13px; }
+  footer a { color: #64748b; margin: 0 8px; }
 </style>
 </head>
 <body>
-<div class="widget">
-  <div class="header">
-    <div>
-      <h1>SmartSupport 智能客服</h1>
-      <p id="subtitle">知识库问答 · 订单查询 · 退款审批 · <a href="/console.html" style="color:#fff">🎛️ 运营台</a></p>
-    </div>
-    <button id="escalate" title="铁律：点击即直转人工">🖐️ 转人工</button>
+
+<nav class="nav">
+  <a class="logo" href="/">Smart<span>Support</span></a>
+  <div class="nav-actions">
+    <a class="btn btn-ghost" href="/demo.html">在线演示</a>
+    <a class="btn btn-ghost" href="/portal.html">商户登录</a>
+    <a class="btn btn-primary" href="/portal.html#register">免费注册</a>
   </div>
-  <div class="messages" id="messages"></div>
-  <div class="inputbar">
-    <input id="input" type="text" placeholder="试试：查订单 SO-0002 / 退款 / 退货政策" autocomplete="off">
-    <button id="send">发送</button>
+</nav>
+
+<header class="hero">
+  <h1>把<em>AI 智能客服</em>装进你的网站<br>只需一行代码</h1>
+  <p class="sub">注册商户账号，贴一段脚本，你的网站立刻拥有会查订单、能办退款、
+  发送前自带质检的多 Agent 智能客服——人工审批、知识库、运营洞察全部开箱即用。</p>
+  <div class="hero-ctas">
+    <a class="btn btn-primary" href="/portal.html#register">🚀 免费注册接入</a>
+    <a class="btn btn-ghost" style="border:1px solid #c7d2fe" href="/demo.html">💬 先体验顾客视角</a>
   </div>
-</div>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><h3>注册商户</h3><p>30 秒开通，即刻获得 Widget 密钥与 API 密钥。</p></div>
+    <div class="step"><span class="n">2</span><h3>嵌入网站</h3><p>把这段代码贴进你的网页，客服浮窗立即上线。</p><code>&lt;script src="…/embed.js" data-key="pk_…" async&gt;&lt;/script&gt;</code></div>
+    <div class="step"><span class="n">3</span><h3>导入数据</h3><p>CSV 上传或 API 推送商品与订单，AI 即可查询办理。</p><code>POST /api/v1/orders · Bearer sk_…</code></div>
+  </div>
+</header>
 
-<script>
-const API = location.origin + "/api/chat";
-const messagesEl = document.getElementById("messages");
-const inputEl = document.getElementById("input");
-const sendBtn = document.getElementById("send");
-let sessionId = null;
-let busy = false;
+<section class="features">
+  <h2>不只是聊天机器人</h2>
+  <p class="center">多专家 Agent 架构 · 每一句话发出前都过质检 · 资金操作有人工审批兜底</p>
+  <div class="grid">
+    <div class="card"><div class="icon">🤖</div><h3>多 Agent 分诊协作</h3><p>分诊 → 知识库 / 订单 / 处置专家接力的状态机编排。权限按 Agent 隔离：查单的 Agent 永远办不了退款。</p></div>
+    <div class="card"><div class="icon">🛡️</div><h3>发送前三段式质检</h3><p>引用核对 · 条件覆盖 · 忠实性检查。答案引用错、漏限定词、掺幻觉，都会被打回重写或转人工。</p></div>
+    <div class="card"><div class="icon">⚖️</div><h3>人机协同审批</h3><p>退款按多维风险评分分级：小额自动执行、中额人工审批、大额双签。幂等设计保证永不双退款。</p></div>
+    <div class="card"><div class="icon">🔐</div><h3>租户数据隔离</h3><p>每家商户的知识库、订单、规则、会话完全隔离；越权查询（IDOR）、拆单攻击、提示词注入均有防御。</p></div>
+    <div class="card"><div class="icon">🔌</div><h3>BYOM 自带模型</h3><p>不绑定任何模型厂商：DeepSeek / OpenAI / 智谱 / 本地 Ollama，填入你的 API Key 即插即用，不配也能用平台默认。</p></div>
+    <div class="card"><div class="icon">📈</div><h3>运营自改进闭环</h3><p>拒答自动归因为知识缺口 → 生成草稿 → 人工审核入库；每日洞察日报告诉你今天发生了什么、该修什么。</p></div>
+  </div>
+</section>
 
-function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+<section class="demo-band">
+  <h2>坐进系统的另一侧</h2>
+  <p>双角色演示：先当顾客聊天，再注册一个你自己的商户，把客服嵌到你的页面里，
+  坐进运营台亲手批一次退款。</p>
+  <div class="row">
+    <a class="btn btn-outline" href="/demo.html">💬 顾客视角演示</a>
+    <a class="btn btn-outline" href="/portal.html#register">🧑‍💼 注册我的商户</a>
+    <a class="btn btn-outline" href="/test-merchant.html">🧪 看嵌入效果示例</a>
+  </div>
+</section>
 
-function addBubble(role, text = "") {
-  const el = document.createElement("div");
-  el.className = "bubble " + role;
-  el.textContent = text;   // textContent：内容永远按纯文本渲染，天然防注入
-  messagesEl.appendChild(el);
-  scrollBottom();
-  return el;
-}
+<footer>
+  <span>SmartSupport · LLM 原生多 Agent 智能客服 SaaS</span>
+  <a href="/docs" target="_blank">API 文档</a>
+  <a href="https://github.com/wanfeng686/image" target="_blank">GitHub</a>
+</footer>
 
-function addStatus(text) {
-  const el = document.createElement("div");
-  el.className = "status";
-  el.innerHTML = '<span class="dot"></span>' + text;
-  messagesEl.appendChild(el);
-  scrollBottom();
-  return el;
-}
-
-function addSteps(steps) {
-  const el = document.createElement("div");
-  el.className = "steps";
-  el.innerHTML = steps.map(s => "<span>" + s + "</span>").join("<i>→</i>");
-  messagesEl.appendChild(el);
-  scrollBottom();
-}
-
-// 数据卡片：订单卡 / 退款卡（字段全部来自后端 card_data，前端只做展示）
-function addCard(card) {
-  const CN = { paid: "已支付", shipped: "已发货", delivered: "已签收",
-               refunding: "退款中", refunded: "已退款",
-               auto_approved: "✅ 已自动退款", pending_approval: "⏳ 等待人工审批" };
-  const type = card.type === "refund" ? "退款进度" : "订单详情";
-  const rows = [];
-  const row = (k, v, cls) => rows.push('<div class="' + (cls || "") + '"><b>' + k + '</b>：' + v + "</div>");
-  if (card.type === "order") {
-    row("商品", card.product);
-    row("金额", "¥" + Number(card.amount).toFixed(2));
-    row("状态", CN[card.status] || card.status);
-    row("预计送达", card.eta || "—");
-    if (card.tracking_no) row("物流", card.carrier + " " + card.tracking_no, "full");
-  } else {
-    row("订单", card.order_no);
-    row("金额", "¥" + Number(card.amount).toFixed(2));
-    row("进度", CN[card.status] || card.status);
-    if (card.risk_score != null) row("风险分", card.risk_score + "（" + (card.risk_level || "") + "）");
-    if (card.required_approvals > 1) row("审批", "需双签（2 人）", "full");
-  }
-  const el = document.createElement("div");
-  el.className = "card " + card.type;
-  el.innerHTML = '<div class="card-head"><span>' + type + '</span><span>' + (card.order_no || "") +
-                 "</span></div>" + '<div class="card-body">' + rows.join("") + "</div>";
-  messagesEl.appendChild(el);
-  scrollBottom();
-}
-
-function addBanner(text) {
-  const el = document.createElement("div");
-  el.className = "banner";
-  el.textContent = text;
-  messagesEl.appendChild(el);
-  scrollBottom();
-}
-
-// 页面加载即开一个新会话。演示模式：绑定种子数据里的"顾客演示"（有订单可查可退）
-// SaaS 化：会话创建必须带租户 Widget 密钥（演示商城）
-const WIDGET_KEY = "pk_demo000000000000";
-
-async function init() {
-  const resp = await fetch(API + "/sessions", {
-    method: "POST", headers: { "Content-Type": "application/json", "X-Widget-Key": WIDGET_KEY },
-    body: JSON.stringify({ user_external_id: "demo" }),
-  });
-  const session = await resp.json();
-  sessionId = session.id;
-  addBubble("agent", "您好，我是 SmartSupport 智能客服。可以问我政策、查订单、办退款。\n演示提示：您的订单有 SO-0001 / SO-0002 / SO-0003。");
-}
-
-async function escalate() {
-  if (!sessionId) return;
-  await fetch(API + "/sessions/" + sessionId + "/escalate", { method: "POST" });
-  addBanner("已为您转接人工客服，请稍候…");
-  document.getElementById("subtitle").textContent = "已转人工 · 等待客服接入";
-}
-
-async function send() {
-  const content = inputEl.value.trim();
-  if (!content || busy || !sessionId) return;
-  busy = true; sendBtn.disabled = true; inputEl.value = "";
-  addBubble("customer", content);
-
-  try {
-    const resp = await fetch(API + "/sessions/" + sessionId + "/messages/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    });
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "", bubble = null, statusEl = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf("\n\n")) !== -1) {
-        const frame = buf.slice(0, i);
-        buf = buf.slice(i + 2);
-        let event = "message", data = "";
-        for (const line of frame.split("\n")) {
-          if (line.startsWith("event: ")) event = line.slice(7).trim();
-          else if (line.startsWith("data: ")) data += line.slice(6);
-        }
-        const payload = data ? JSON.parse(data) : {};
-
-        if (event === "turn_start") {
-          bubble = addBubble("agent");
-        } else if (event === "agent_status") {
-          const names = { knowledge: "知识助手检索中…", order: "订单查询中…", resolution: "处置评估中…" };
-          if (payload.status === "working") statusEl = addStatus(names[payload.agent] || "处理中…");
-          else if (statusEl) { statusEl.remove(); statusEl = null; }
-        } else if (event === "message_delta") {
-          bubble.textContent += payload.delta;
-          scrollBottom();
-        } else if (event === "card") {
-          addCard(payload.card_data);
-        } else if (event === "approval_pending") {
-          addBanner("🟡 " + payload.summary + "，预计 " +
-                    new Date(payload.timeout_at).toLocaleTimeString() + " 前处理");
-        } else if (event === "session_status") {
-          document.getElementById("subtitle").textContent = "等待人工审批…";
-        } else if (event === "turn_end") {
-          addSteps(payload.steps);
-        }
-      }
-    }
-  } catch (e) {
-    addBubble("agent", "连接出现问题，请稍后重试。");
-  }
-  busy = false; sendBtn.disabled = false; inputEl.focus();
-}
-
-sendBtn.addEventListener("click", send);
-document.getElementById("escalate").addEventListener("click", escalate);
-inputEl.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
-init();
-inputEl.focus();
-</script>
 </body>
 </html>

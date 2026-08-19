@@ -2,6 +2,11 @@
 
 这是 SaaS 化的租户进站口：iframe Widget 页与旧演示页都从这里创建会话。
 后续消息收发复用 /api/chat/*（session UUID 即能力凭证，与既有设计一致）。
+
+Origin 校验说明：iframe 与平台同源，浏览器 Origin 头是平台域名，
+所以 iframe 页会把商户页面 origin 以 X-Widget-Origin 声明传入
+（loader 的 o 参数）。这是声明式校验（防顺手嵌入），非密码学验证，
+强域名归属验证（DNS TXT 等）在 Roadmap。
 """
 import uuid
 
@@ -33,9 +38,10 @@ def create_widget_session(
     db: Session = Depends(get_db),
     x_widget_key: str | None = Header(default=None),
     origin: str | None = Header(default=None),
+    x_widget_origin: str | None = Header(default=None),
 ):
     tenant = tenant_svc.require_tenant_by_widget_key(db, x_widget_key)
-    tenant_svc.check_widget_origin(tenant, origin)
+    tenant_svc.check_widget_origin(tenant, x_widget_origin or origin)
 
     user = None
     if body.user_external_id:
@@ -61,9 +67,10 @@ def create_widget_session(
 
 @router.get("/boot")
 def widget_boot(db: Session = Depends(get_db),
-                key: str | None = None, origin: str | None = Header(default=None)):
+                key: str | None = None, origin: str | None = Header(default=None),
+                x_widget_origin: str | None = Header(default=None)):
     """Widget 加载时取品牌配置（不建会话；会话由 POST /sessions 创建）。"""
     tenant = tenant_svc.require_tenant_by_widget_key(db, key)
-    tenant_svc.check_widget_origin(tenant, origin)
+    tenant_svc.check_widget_origin(tenant, x_widget_origin or origin)
     return {"tenant": {"id": str(tenant.id), "name": tenant.name},
             "brand": tenant_svc.brand_dict(tenant)}
